@@ -1,1 +1,2 @@
 graft lib/include
+include NOTICE LICENSE Makefile
