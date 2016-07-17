@@ -17,31 +17,12 @@
 #  limitations under the License.
 
 
-ctypedef void* void_ptr  
+from .core cimport *
+from .graph cimport Graph  # cyclic import TODO: try to remove this
 
-cdef class _MBlock:
-    cdef:
-        void_ptr start, end, ptr, _ptr
-        _MBlock  next
+cdef extern from "graph_dfs.h":
+    ctypedef bint (*f_report_vertex)(void*, graph_vertex*)
+    size_t graph_components(graph_vertex*,f_report_vertex,void*) except *
 
-        size_t size(self)
-        size_t remaining(self)
-        bint   in_block(self, void *ptr)
-        void  *request(self, size_t bytes) except NULL
-
-cdef class _MBlockIter:
-    cdef _MBlock current
-
-cdef class MBlockAllocator:
-    cdef:
-        _MBlock head
-        size_t  block_size
-        size_t  align
-
-        void    *request(self, size_t bytes) except NULL
-        size_t   available(self, size_t bytes=*)
-
-
-
-cdef class TextFileTokenizer:
-    cdef object lines, tokens
+cpdef list components(Graph) 
+cpdef list components_c(Graph)

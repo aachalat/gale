@@ -194,6 +194,9 @@ pyx_modules = [
                include_dirs=include_dirs),
     Extension("galxe.core", sources=["galxe/core.pyx"], 
                include_dirs=include_dirs),
+    Extension("galxe.dfs", sources=["galxe/dfs.pyx"],
+               libraries=["galxe_support"], 
+               include_dirs=include_dirs),
 ]
 
 ext_modules.extend(cythonize(pyx_modules))

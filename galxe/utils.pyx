@@ -100,3 +100,21 @@ cdef class MBlockAllocator:
         if self.head is None:
             return 0
         return <size_t>(self.head.remaining() / bytes)
+
+cdef class TextFileTokenizer:
+    def __cinit__(self, file_):
+        self.lines = iter(file_)
+        self.tokens = None
+    def __iter__(self):
+        return self
+    def __next__(self):
+        try:
+            while 1:
+                if self.tokens is None:
+                    self.tokens = iter(self.lines.next().strip().split())
+                try:
+                    return self.tokens.next()
+                except StopIteration:
+                    self.tokens = None
+        except StopIteration:
+            raise

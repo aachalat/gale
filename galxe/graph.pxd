@@ -19,9 +19,6 @@
 
 from .core cimport *
 
-cdef class TextFileTokenizer:
-    cdef object lines, tokens
-
 cdef class Graph:
     cdef:
         graph_vertex *vertices
@@ -41,8 +38,14 @@ cdef class Graph:
     cpdef list make_rep(self, bint sort=*)
     cpdef Graph ensure_edge(self, size_t u, size_t v)
     cpdef Graph ensure_vertex(self, size_t v)
+
+    # dfs algorithms that work with standard graph_vertex (w0,w1 defined)
+    # see dfs.pyx for implementations
+
     cpdef list components(self)
- 
+    cpdef list components_c(self)
+
+
 
 cpdef list parse_file(str file_name)
 

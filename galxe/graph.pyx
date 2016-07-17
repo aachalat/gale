@@ -17,7 +17,8 @@
 #  limitations under the License.
 
 
-
+from .utils cimport TextFileTokenizer
+from .dfs cimport components, components_c
 
 cdef class Graph:
 
@@ -216,73 +217,6 @@ cdef class Graph:
         if sort: rep.sort()
         return rep
 
-    #cpdef list components_from_c(self):
-    #    cdef list l = []
-    #    graph_components(self.vertices, <void*>l, <found_vid>add_to_list )
-    #    return l
-
-
-
-    cpdef list components(self):
-        cdef graph_vertex *v = self.vertices
-        cdef graph_arc    *a 
-        cdef size_t order = 0
-        cdef list components = []
-
-        if v==NULL:
-            return components
-
-        # initialize order etc...
-
-        while (v!=NULL):
-            v.w0.order = 0
-            v = v.next
-
-        v = self.vertices
-        while v!=NULL:
-
-            if v.arcs==NULL:
-                components.append(v.vid)
-                v = v.next
-                continue
-            
-            if v.w0.order != 0:
-                v = v.next
-                continue
-            
-            # start dfs on v
-            a = v.arcs
-            order += 1
-            v.w0.order = order
-            components.append(v.vid)
-            v.w1.arcs = NULL
-
-            while 1:
-                if a!=NULL:
-                    if as_vertex(a).w0.order != 0:
-                        # skip already visited vertices
-                        a = a.next
-                        continue
-                    # descend into v
-                    v = as_vertex(a)
-                    order += 1
-                    v.w0.order = order
-                    v.w1.arcs = a_cross(a)
-                    a = v.arcs
-                    continue
-                else:
-                    # backup to previous vertex
-                    a = v.w1.arcs
-                    if a == NULL:
-                        break
-                    v = as_vertex(a)
-                    a = a_cross(a)
-                    a = a.next
-                    continue
-
-            v = v.next
-
-        return components
 
     def __getitem__(self, vid):
         #return the adjacent vertices to v
@@ -314,29 +248,8 @@ cdef class Graph:
             g += (u,v)
         return g
 
-
-#cdef void add_to_list(void *list_, size_t value):
-#    (<list>list_).append(value)
-
-
-cdef class TextFileTokenizer:
-    def __cinit__(self, file_):
-        self.lines = iter(file_)
-        self.tokens = None
-    def __iter__(self):
-        return self
-    def __next__(self):
-        try:
-            while 1:
-                if self.tokens is None:
-                    self.tokens = iter(self.lines.next().strip().split())
-                try:
-                    return self.tokens.next()
-                except StopIteration:
-                    self.tokens = None
-        except StopIteration:
-            raise
-
+    cpdef list components(self): return components(self)
+    cpdef list components_c(self): return components_c(self)
 
 cpdef list parse_file(str file_name):
     #try to parse a gng text file
@@ -344,6 +257,8 @@ cpdef list parse_file(str file_name):
     cdef list graphs = []
     cdef Graph g
     cdef int i, v = 0
+
+
     cdef TextFileTokenizer t
     cdef object f
 
