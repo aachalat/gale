@@ -19,7 +19,6 @@
 
 def meta_info():
     name="galxe"
-    version="0.0.1"
     
     description="graph algorithm c extensions for python"
     long_description="""
@@ -39,6 +38,24 @@ def meta_info():
 
     url="https://github.com/aachalat/galxe.git"
     license="Apache License, Version 2.0"
+
+    classifiers=[
+        "Development Status :: 2 - Pre-Alpha",
+        "License :: OSI Approved :: Apache Software License",
+        "Intended Audience :: Science/Research",
+        "Intended Audience :: Education",
+        "Intended Audience :: Developers",
+        "Programming Language :: C"
+        "Programming Language :: Cython",
+        "Programming Language :: Python",
+        "Programming Language :: Python :: Implementation :: CPython",
+        "Topic :: Education",
+        "Topic :: Scientific/Engineering :: Mathematics",
+        "Operating System :: POSIX",
+        "Operating System :: MacOS :: MacOS X",
+        "Operating System :: POSIX :: Linux",
+    ]
+
     return vars()
 
 import os
@@ -54,6 +71,9 @@ from distutils import log
 
 # check for file existance before chdir called
 _is_full_source_tree = isfile(join(dirname(__file__),"MANIFEST.in"))
+
+with open(join(dirname(__file__), "galxe", "VERSION")) as f:
+    VERSION = f.read().strip()
 
 #make sure setup works as expected:  TODO: maybe remove this
 if __name__=="__main__" and dirname(__file__): os.chdir(dirname(__file__))
@@ -182,7 +202,9 @@ if __name__ == "__main__":
 
   setup(
       packages=["galxe"],
+      package_data={"galxe":["VERSION"]},
       ext_modules=ext_modules,
       cmdclass = {'build_ext':build_ext},
+      version=VERSION,
       **meta_info() 
   )
