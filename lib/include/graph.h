@@ -7,7 +7,7 @@
   you may not use this file except in compliance with the License.
   You may obtain a copy of the License at
 
-  
+
       http://www.apache.org/licenses/LICENSE-2.0
 
 
@@ -25,7 +25,7 @@
 #include <stdint.h>
 
 struct graph_arc {
-    struct graph_arc **target;  /* target vertex arc list, 
+    struct graph_arc **target;  /* target vertex arc list,
                                    also can cast to graph_vertex* */
     struct graph_arc *next;
 };
@@ -46,8 +46,8 @@ union graph_edge {
     struct graph_arc a[2];
 };
 
-/* TODO: allow for different pointer sizes, will require some work 
-   TODO: ensure that arc structure size is a power of 2 
+/* TODO: allow for different pointer sizes, will require some work
+   TODO: ensure that arc structure size is a power of 2
    NOTE: graph_edge must be memory aligned to 2*sizeof(struct graph_arc) */
 
 #define a_cross(ARC) \

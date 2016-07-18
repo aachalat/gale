@@ -6,7 +6,7 @@
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
 #
-#  
+#
 #      http://www.apache.org/licenses/LICENSE-2.0
 #
 #
@@ -19,6 +19,24 @@
 
 from .utils cimport TextFileTokenizer
 from .dfs cimport components, components_c
+
+cdef class VertexIterator:
+    cdef (graph_vertex *) v, n
+
+    def __cinit__(self, Graph g):
+        self.v = g.vertices
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        cdef graph_vertex *n
+        n = self.v
+        if n == NULL:
+            raise StopIteration()
+        self.v = n.next
+        return n.vid
+
 
 cdef class Graph:
 
@@ -84,11 +102,11 @@ cdef class Graph:
 
     def __repr__(self):
         from pprint import saferepr
-        return "%s(%s)" % (self.__class__.__name__, 
+        return "%s(%s)" % (self.__class__.__name__,
                            saferepr(self.make_rep(sort=True)))
 
     def __str__(self):
-        cdef str jrep, s = "{ \"%s\":[" % self.name 
+        cdef str jrep, s = "{ \"%s\":[" % self.name
         cdef list irep, rep = self.make_rep(sort=True)
         from pprint import pformat
         for irep in rep:
@@ -180,6 +198,9 @@ cdef class Graph:
             v = v.next
         return x
 
+    def __iter__(self):
+        return VertexIterator(self)
+
     cpdef void parse_rep(self, rep) except *:
         cdef list x, crep
         cdef size_t v=0, u=0
@@ -194,7 +215,7 @@ cdef class Graph:
                 self.ensure_edge(u, v)
             else:
                 self.ensure_vertex(v)
-        
+
     cpdef list make_rep(self, bint sort=False):
         cdef graph_vertex *v = self.vertices
         cdef graph_arc *a
@@ -252,12 +273,12 @@ cdef class Graph:
     cpdef list components_c(self): return components_c(self)
 
 cpdef list parse_file(str file_name):
-    #try to parse a gng text file
+    #try to parse a gng text file of simple undirected graphs
     #returns list of graphs
     cdef list graphs = []
     cdef Graph g
     cdef int i, v = 0
-
+    cdef str nm
 
     cdef TextFileTokenizer t
     cdef object f
@@ -268,7 +289,12 @@ cpdef list parse_file(str file_name):
             try:
                 while t.next() != "$": pass
                 if t.next().lower()=="&graph":
-                    g = Graph(name=t.next(), vb_count=int(t.next()))
+                    nm = t.next()
+                    v  = int(t.next())
+                    g = Graph(name=nm, vb_count=v)
+                    # create all vertices from 1..i first for
+                    # the case of a solitary vertex (slower but nessesary)
+                    for i in xrange(v,0,-1): g+=i
                     i = int(t.next())
                     while i:
                         if i<0:
@@ -281,11 +307,36 @@ cpdef list parse_file(str file_name):
                 break
     return graphs
 
+cpdef size_t write_file(str file_name, list graphs, bint relabel=True):
+    #write out gng style text file of simple graphs
+    cdef size_t vid
+    cdef str edges
+    cdef graph_vertex *v
+    cdef size_t c, gc=0
+    cdef Graph g
 
+    from os.path import isfile
 
-
-
-
-
-
-
+    if isfile(file_name):
+        raise Exception("Will not overwrite existing file.")  #TODO: different exception
+    with open(file_name, "w") as f:
+        for g in graphs:
+            if len(g) != max(g):
+                if relabel:
+                    #make copy of g and relabel vertices 1..|V(G)|
+                    g = type(g)(g, name=g.name+"_relabeled") # maybe change block counts...
+                    v = g.vertices
+                    c = 0
+                    while (v):
+                        c +=1
+                        v.vid = c
+                        v = v.next
+                else:
+                    raise Exception("GnG graph must have vertices 1..|V(G)|")
+            f.write("$\n&graph\n%s\n%i\n" % (g.name, len(g)))
+            gc += 1
+            for vid in g:
+                edges = " ".join([str(y) for y in g[vid] if y > vid])
+                if edges: f.write("-%i %s\n" % (vid, edges))
+            f.write('0\n')
+    return gc

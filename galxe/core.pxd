@@ -6,7 +6,7 @@
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
 #
-#  
+#
 #      http://www.apache.org/licenses/LICENSE-2.0
 #
 #
@@ -20,7 +20,7 @@
 cdef extern from "graph.h":
     struct graph_arc:
         graph_arc **target
-        graph_arc *next 
+        graph_arc *next
 
     struct graph_vertex
 
@@ -33,7 +33,7 @@ cdef extern from "graph.h":
         size_t        color
 
     struct graph_vertex:
-        graph_arc    *arcs  
+        graph_arc    *arcs
         graph_vertex *next
         size_t vid
         word_aux    w0

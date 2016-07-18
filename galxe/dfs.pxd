@@ -6,7 +6,7 @@
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
 #
-#  
+#
 #      http://www.apache.org/licenses/LICENSE-2.0
 #
 #
@@ -24,5 +24,5 @@ cdef extern from "graph_dfs.h":
     ctypedef bint (*f_report_vertex)(void*, graph_vertex*)
     size_t graph_components(graph_vertex*,f_report_vertex,void*) except *
 
-cpdef list components(Graph) 
+cpdef list components(Graph)
 cpdef list components_c(Graph)

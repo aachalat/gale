@@ -6,7 +6,7 @@
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
 #
-#  
+#
 #      http://www.apache.org/licenses/LICENSE-2.0
 #
 #
@@ -21,17 +21,17 @@ from libc.stdint cimport uintptr_t
 
 cdef class _MBlock:
     def __cinit__(self, size_t size, size_t align=0):
-        cdef void* ptr 
+        cdef void* ptr
         cdef size_t rsize=size
         cdef uintptr_t z
         if (align and not (align & (align-1))):
             rsize += align - 1
-        self._ptr = ptr = <void*>PyMem_Malloc(rsize) 
+        self._ptr = ptr = <void*>PyMem_Malloc(rsize)
         if ptr == NULL:
             raise MemoryError()
         if (align and not (align & (align-1))):
             z = align - 1
-            ptr=<void*>(((<uintptr_t>ptr) + z) & ~z) 
+            ptr=<void*>(((<uintptr_t>ptr) + z) & ~z)
             #if ptr != self._ptr:
             #    print "moved ptr:"
             #    print '\tnew:\t\t',<uintptr_t>ptr
@@ -56,7 +56,7 @@ cdef class _MBlock:
         return <char*>self.ptr - <char*>self.start
 
     cdef bint in_block(self, void *ptr):
-        return (<char*>ptr >= <char*>self.start and 
+        return (<char*>ptr >= <char*>self.start and
                 <char*>ptr < <char*>self.end)
 
     cdef void_ptr request(self, size_t bytes) except NULL:

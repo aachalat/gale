@@ -6,7 +6,7 @@
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
 #
-#  
+#
 #      http://www.apache.org/licenses/LICENSE-2.0
 #
 #
@@ -36,15 +36,15 @@ cdef class VertexManager:
     cdef void release(self, graph_vertex* v):
         v.next = self.vertices
         self.vertices = v.next
-        
+
     def __str__(self):
         cdef str s
         s =  "vertex allocator:\n"
-        s +=  "\tvertices available: %i\n" % (len(self) + 
-                            self.allocator.available(self.v_size)) 
+        s +=  "\tvertices available: %i\n" % (len(self) +
+                            self.allocator.available(self.v_size))
         s += "\tblocks allocated: %i\n" % len(self.allocator)
         s += "\tblock size: %i bytes  (%i vertices per block)\n" % (
-                            self.allocator.block_size, 
+                            self.allocator.block_size,
                             self.allocator.block_size / self.v_size)
         return s
 
@@ -76,11 +76,11 @@ cdef class VertexManager:
 #    def __str__(self):
 #        cdef str s
 #        s =  "arc allocator:\n"
-#        s +=  "\tarcs available: %i\n" % (len(self) + 
-#                            self.allocator.available(self.a_size)) 
+#        s +=  "\tarcs available: %i\n" % (len(self) +
+#                            self.allocator.available(self.a_size))
 #        s += "\tblocks allocated: %i\n" % len(self.allocator)
 #        s += "\tblock size: %i bytes  (%i arcs per block)\n" % (
-#                            self.allocator.block_size, 
+#                            self.allocator.block_size,
 #                            self.allocator.block_size / self.a_size)
 #        return s
 #    def __len__(self):
@@ -114,11 +114,11 @@ cdef class EdgeManager:
     def __str__(self):
         cdef str s
         s =  "edge allocator:\n"
-        s +=  "\tedges available: %i\n" % (len(self) + 
-                            self.allocator.available(self.e_size)) 
+        s +=  "\tedges available: %i\n" % (len(self) +
+                            self.allocator.available(self.e_size))
         s += "\tblocks allocated: %i\n" % len(self.allocator)
         s += "\tblock size: %i bytes  (%i edges per block)\n" % (
-                            self.allocator.block_size, 
+                            self.allocator.block_size,
                             self.allocator.block_size / self.e_size)
         return s
     def __len__(self):

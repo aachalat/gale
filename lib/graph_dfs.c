@@ -7,7 +7,7 @@
   you may not use this file except in compliance with the License.
   You may obtain a copy of the License at
 
-  
+
       http://www.apache.org/licenses/LICENSE-2.0
 
 
@@ -20,10 +20,10 @@
 */
 
 #include "graph_dfs.h"
- 
+
 size_t
 graph_components(
-    struct graph_vertex* vertices, 
+    struct graph_vertex* vertices,
     f_report_vertex found_component_rep,
     void *container)
 {
@@ -33,7 +33,7 @@ graph_components(
 
     if (!v) return count;
 
-    while (v) { 
+    while (v) {
         v->w0.order = 0;
         v = v->next;
     }
@@ -47,7 +47,7 @@ graph_components(
             v = v->next;
             continue;
         }
-        
+
         if (v->w0.order) {
             v = v->next;
             continue;

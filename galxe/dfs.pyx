@@ -6,7 +6,7 @@
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
 #
-#  
+#
 #      http://www.apache.org/licenses/LICENSE-2.0
 #
 #
@@ -36,11 +36,16 @@ cdef bint add_vid_to_list_exc(void *list_, graph_vertex* v):
 cdef class list_wrapper(list):
     cdef object lw_exc
 
+# graph component algorithms, c version w/ callbacks and cython version
+# The c version seems to run faster (very slight) when there are few
+# components, but the cython version becomes faster with larger
+# numbers of components.
+
 cpdef list components_c(Graph g):
     cdef list_wrapper cp = list_wrapper()
     graph_components(
-        g.vertices, 
-        <f_report_vertex>add_vid_to_list_exc, 
+        g.vertices,
+        <f_report_vertex>add_vid_to_list_exc,
         <void*>cp)
     if cp.lw_exc is not None:
         raise cp.lw_exc[0], cp.lw_exc[1], cp.lw_exc[2]
@@ -48,7 +53,7 @@ cpdef list components_c(Graph g):
 
 cpdef list components(Graph g):
     cdef graph_vertex *v = g.vertices
-    cdef graph_arc    *a 
+    cdef graph_arc    *a
     cdef size_t order = 0
     cdef list components = []
 
@@ -68,11 +73,11 @@ cpdef list components(Graph g):
             components.append(v.vid)
             v = v.next
             continue
-        
+
         if v.w0.order != 0:
             v = v.next
             continue
-        
+
         # start dfs on v
         a = v.arcs
         order += 1
@@ -99,8 +104,7 @@ cpdef list components(Graph g):
                 if a == NULL:
                     break
                 v = as_vertex(a)
-                a = a_cross(a)
-                a = a.next
+                a = a_cross(a).next
                 continue
 
         v = v.next

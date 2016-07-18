@@ -6,7 +6,7 @@
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
 #
-#  
+#
 #      http://www.apache.org/licenses/LICENSE-2.0
 #
 #
@@ -19,10 +19,10 @@
 
 def meta_info():
     name="galxe"
-    
+
     description="graph algorithm c extensions for python"
     long_description="""
-    Various algorithms from graph theory. 
+    Various algorithms from graph theory.
 
     Using a c library and cython to create python extension classes.
 
@@ -92,7 +92,7 @@ def _mock_cythonize(args):
 if _is_full_source_tree:
     # using the full source tree (not in a source distribution)
     try:
-        #raise ImportError 
+        #raise ImportError
         from Cython.Build import cythonize
     except ImportError:
         def cythonize(args):
@@ -119,7 +119,7 @@ class build_ext(_build_ext):
           for x in self.distribution.packages:
               self.library_dirs.append(join(self.build_lib,x))
         if sys.platform.lower().startswith("linux"):
-            # allow shared library to be found in same folder as 
+            # allow shared library to be found in same folder as
             # dependant module
             for x in self.extensions:
                 if len(x.libraries): x.runtime_library_dirs=["$ORIGIN"]
@@ -140,7 +140,7 @@ class build_ext(_build_ext):
                                 fn += ".dylib"
                             p.append(fn)
                             x.depends.append(join(*p))
-                
+
     if sys.platform == 'darwin':
         # intercept module building to allow for shared library ("lib" prefix)
         # to be used on osx (normally a mach-O bundle/module is made and
@@ -164,14 +164,14 @@ class build_ext(_build_ext):
                     self.compiler.shared_lib_extension = ".dylib"
                     CV['SO'] = ".dylib"
                     self.compiler.linker_so[:] = [
-                            x.replace('-bundle', '-dynamiclib') 
+                            x.replace('-bundle', '-dynamiclib')
                                 for x in self.compiler.linker_so]
                     ext.extra_link_args.extend([
                           "-install_name",
-                          "@loader_path/%s" 
+                          "@loader_path/%s"
                                 % split(self.get_ext_filename(ext.name))[-1]])
                     log.info(
-                        "patched linker options for dylib: %s" 
+                        "patched linker options for dylib: %s"
                             % self.get_ext_filename(ext.name))
                     return _build_ext.build_extension(self, ext)
             return _build_ext.build_extension(self, ext)
@@ -181,21 +181,21 @@ include_dirs = ["lib/include"]
 ext_modules = [
     #using distutils build_ext to make a shared library in the galxe package
     Extension(
-        "galxe.libgalxe_support", 
-        sources=["lib/graph_core.c", "lib/graph_dfs.c"], 
+        "galxe.libgalxe_support",
+        sources=["lib/graph_core.c", "lib/graph_dfs.c"],
         include_dirs=include_dirs,)
 ]
 
 pyx_modules = [
     Extension("galxe.graph", sources=["galxe/graph.pyx"],
-               libraries=["galxe_support"], 
+               libraries=["galxe_support"],
                include_dirs=include_dirs),
     Extension("galxe.utils", sources=["galxe/utils.pyx"],
                include_dirs=include_dirs),
-    Extension("galxe.core", sources=["galxe/core.pyx"], 
+    Extension("galxe.core", sources=["galxe/core.pyx"],
                include_dirs=include_dirs),
     Extension("galxe.dfs", sources=["galxe/dfs.pyx"],
-               libraries=["galxe_support"], 
+               libraries=["galxe_support"],
                include_dirs=include_dirs),
 ]
 
@@ -209,5 +209,5 @@ if __name__ == "__main__":
       ext_modules=ext_modules,
       cmdclass = {'build_ext':build_ext},
       version=VERSION,
-      **meta_info() 
+      **meta_info()
   )
