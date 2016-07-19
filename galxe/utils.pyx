@@ -59,7 +59,7 @@ cdef class _MBlock:
         return (<char*>ptr >= <char*>self.start and
                 <char*>ptr < <char*>self.end)
 
-    cdef void_ptr request(self, size_t bytes) except NULL:
+    cdef void * request(self, size_t bytes) except NULL:
         cdef char *ptr = (<char*>self.ptr) - bytes
         if ptr < <char*>self.start:
             raise MemoryError()
@@ -87,7 +87,7 @@ cdef class MBlockAllocator:
         return _MBlockIter(self.head)
     def __len__(self):
         return sum(1 for _ in iter(self))
-    cdef void_ptr request(self, size_t bytes) except NULL:
+    cdef void* request(self, size_t bytes) except NULL:
         cdef _MBlock mb = self.head
         if bytes > self.block_size:
             raise MemoryError("block_size is lower than requested bytes.")

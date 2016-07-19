@@ -13,5 +13,5 @@ sdist:
 .PHONY: clean
 clean:
 	python setup.py clean -a
-	rm -f galxe/*.so galxe/*.dylib MANIFEST galxe/*.c
+	rm -f galxe/*.so galxe/*.dylib MANIFEST
 	rm -rf dist

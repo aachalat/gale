@@ -44,6 +44,7 @@ cdef class Graph:
 
     cpdef list components(self)
     cpdef list components_c(self)
+    cpdef bint connected(Graph)
 
 
 

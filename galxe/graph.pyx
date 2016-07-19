@@ -18,7 +18,7 @@
 
 
 from .utils cimport TextFileTokenizer
-from .dfs cimport components, components_c
+from .dfs cimport components, components_c, connected
 
 cdef class VertexIterator:
     cdef (graph_vertex *) v, n
@@ -269,8 +269,10 @@ cdef class Graph:
             g += (u,v)
         return g
 
+    # see dfs.pyx for implmentation
     cpdef list components(self): return components(self)
     cpdef list components_c(self): return components_c(self)
+    cpdef bint connected(self): return connected(self)
 
 cpdef list parse_file(str file_name):
     #try to parse a gng text file of simple undirected graphs

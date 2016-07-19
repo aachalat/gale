@@ -110,3 +110,60 @@ cpdef list components(Graph g):
         v = v.next
 
     return components
+
+cpdef bint connected(Graph g):
+    # modified form of list components to determine if graph is
+    # connected within a single component
+    cdef graph_vertex *v = g.vertices
+    cdef graph_arc    *a
+    cdef size_t count = 0
+
+    if v==NULL:
+        return True
+
+    # initialize order etc...
+
+    while v != NULL:
+        v.w0.order = 0
+        count += 1
+        v = v.next
+
+    if count == 1:
+        return True
+
+    v = g.vertices
+
+    if v.arcs==NULL:
+        return False
+
+    # start dfs on v
+    a = v.arcs
+    v.w0.order = 1
+    count -= 1
+    v.w1.arcs = NULL
+
+    while 1:
+        if a!=NULL:
+            if as_vertex(a).w0.order != 0:
+                # skip already visited vertices
+                a = a.next
+                continue
+            # descend into v
+            v = as_vertex(a)
+            v.w0.order = 1
+            count -= 1
+            if count == 0:
+                return True
+            v.w1.arcs = a_cross(a)
+            a = v.arcs
+            continue
+        else:
+            # backup to previous vertex
+            a = v.w1.arcs
+            if a == NULL:
+                break
+            v = as_vertex(a)
+            a = a_cross(a).next
+            continue
+
+    return count == 0

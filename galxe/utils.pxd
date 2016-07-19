@@ -17,11 +17,9 @@
 #  limitations under the License.
 
 
-ctypedef void* void_ptr
-
 cdef class _MBlock:
     cdef:
-        void_ptr start, end, ptr, _ptr
+        (void*) start, end, ptr, _ptr
         _MBlock  next
 
         size_t size(self)

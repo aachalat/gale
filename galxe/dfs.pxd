@@ -26,3 +26,4 @@ cdef extern from "graph_dfs.h":
 
 cpdef list components(Graph)
 cpdef list components_c(Graph)
+cpdef bint connected(Graph)

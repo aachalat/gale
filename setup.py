@@ -197,6 +197,9 @@ pyx_modules = [
     Extension("galxe.dfs", sources=["galxe/dfs.pyx"],
                libraries=["galxe_support"],
                include_dirs=include_dirs),
+    Extension("galxe.hamcycle", sources=["galxe/hamcycle.pyx"],
+           libraries=["galxe_support"],
+           include_dirs=include_dirs),
 ]
 
 ext_modules.extend(cythonize(pyx_modules))
