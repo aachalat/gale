@@ -93,7 +93,7 @@ cdef class VertexManager:
 
 cdef class EdgeManager:
     def __cinit__(self, size_t count, size_t size=0):
-        if size < sizeof(graph_vertex): size = sizeof(graph_edge)
+        if size < sizeof(graph_edge): size = sizeof(graph_edge)
         #power of 2 check on size....)
         assert (not (size & (size-1)))
         self.e_size = size
@@ -128,3 +128,17 @@ cdef class EdgeManager:
             x += 1
             a = a.next
         return x
+
+cdef void set_graph_resources(
+    graph_resources *r,
+    VertexManager vm,
+    EdgeManager em
+):
+    if em is not None:
+        r.e_manager = <void*>em
+        r.request_edge = <f_request_edge>em.request
+        r.release_edge = <f_release_edge>em.release
+    if vm is not None:
+        r.v_manager = <void*>vm
+        r.request_vertex = <f_request_vertex>vm.request
+        r.release_vertex = <f_release_vertex>vm.release

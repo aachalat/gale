@@ -66,6 +66,7 @@ cdef extern from "graph.h":
 
 from .utils cimport MBlockAllocator
 
+
 cdef class VertexManager:
     cdef size_t v_size
     cdef graph_vertex *vertices
@@ -86,3 +87,5 @@ cdef class EdgeManager:
     cdef MBlockAllocator allocator
     cdef graph_arc* request(self) except NULL
     cdef void release(self, graph_arc *a)
+
+cdef void set_graph_resources(graph_resources *r, VertexManager, EdgeManager)

@@ -111,7 +111,11 @@ cpdef list components(Graph g):
 
     return components
 
+cpdef size_t components_count(Graph g):
+    return graph_components(g.vertices, <f_report_vertex>NULL, NULL)
+
 cpdef bint connected(Graph g):
+
     # modified form of list components to determine if graph is
     # connected within a single component
     cdef graph_vertex *v = g.vertices

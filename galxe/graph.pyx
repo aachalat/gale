@@ -18,7 +18,7 @@
 
 
 from .utils cimport TextFileTokenizer
-from .dfs cimport components, components_c, connected
+from .dfs cimport components, components_c, components_count, connected
 
 cdef class VertexIterator:
     cdef (graph_vertex *) v, n
@@ -83,12 +83,8 @@ cdef class Graph:
             self.v_manager = VertexManager(vb_count, size=self.vertex_size())
         if self.e_manager is None:
             self.e_manager = EdgeManager(eb_count, size=self.edge_size())
-        r.e_manager = <void*>self.e_manager
-        r.v_manager = <void*>self.v_manager
-        r.request_edge = <f_request_edge>self.e_manager.request
-        r.release_edge = <f_release_edge>self.e_manager.release
-        r.request_vertex = <f_request_vertex>self.v_manager.request
-        r.release_vertex = <f_release_vertex>self.v_manager.release
+        set_graph_resources(&self.resources, self.v_manager, self.e_manager)
+
 
     property name:
         def __get__(self):
@@ -273,6 +269,7 @@ cdef class Graph:
     cpdef list components(self): return components(self)
     cpdef list components_c(self): return components_c(self)
     cpdef bint connected(self): return connected(self)
+    cpdef size_t components_count(self): return components_count(self)
 
 cpdef list parse_file(str file_name):
     #try to parse a gng text file of simple undirected graphs

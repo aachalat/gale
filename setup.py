@@ -45,7 +45,7 @@ def meta_info():
         "Intended Audience :: Science/Research",
         "Intended Audience :: Education",
         "Intended Audience :: Developers",
-        "Programming Language :: C"
+        "Programming Language :: C",
         "Programming Language :: Cython",
         "Programming Language :: Python",
         "Programming Language :: Python :: Implementation :: CPython",

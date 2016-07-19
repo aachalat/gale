@@ -43,7 +43,7 @@ graph_components(
     while (v) {
         if (!v->arcs) {
             count++;
-            if (found_component_rep(container, v)) return count;
+            if (found_component_rep && found_component_rep(container, v)) return count;
             v = v->next;
             continue;
         }
@@ -56,7 +56,7 @@ graph_components(
         a = v->arcs;
         v->w0.order = ++order;
         count++;
-        if (found_component_rep(container, v)) return count;
+        if (found_component_rep && found_component_rep(container, v)) return count;
         v->w1.arcs  = (struct graph_arc*)'\0';
 
         while (1){
