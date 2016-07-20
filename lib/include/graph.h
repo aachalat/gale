@@ -46,7 +46,10 @@ union graph_edge {
     struct graph_arc a[2];
 };
 
-/* TODO: allow for different pointer sizes, will require some work
+
+/* access the other arc in an edge
+
+   TODO: allow for different pointer sizes, will require some work
    TODO: ensure that arc structure size is a power of 2
    NOTE: graph_edge must be memory aligned to 2*sizeof(struct graph_arc) */
 
@@ -59,6 +62,7 @@ struct graph_vertex;
 union word_aux {
     struct graph_vertex *vertex;
     struct graph_arc    *arcs;
+    struct graph_arc    **arc_pn;  /* (i.e. &a->next on previous node) */
     void  *other;
     size_t order;
     size_t lowpt;
@@ -72,6 +76,23 @@ struct graph_vertex {
     union word_aux w0;
     union word_aux w1;
 };
+
+struct arc_data {
+    union word_aux w0;
+    union word_aux w1;
+};
+
+struct graph_edge_ext {
+    union graph_edge edge;
+    struct arc_data data[2];
+};
+
+/* for arc data to be accesible edges need to be aligned on
+   sizeof(graph_edge_ext) and allocated to be sizeof(struct graph_edge_ext)*/
+
+#define a_data(ARC) \
+((struct arc_data*)(((uintptr_t)(ARC)) \
+    ^ (uintptr_t)(sizeof(union graph_edge))))
 
 #define as_vertex(ARC) \
     ((struct graph_vertex*)((struct graph_arc*)(ARC)->target))

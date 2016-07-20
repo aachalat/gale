@@ -98,7 +98,8 @@ cdef class EdgeManager:
         assert (not (size & (size-1)))
         self.e_size = size
         self.arcs = NULL
-        self.allocator = MBlockAllocator(block_size=count*size, align=sizeof(graph_edge))
+        self.allocator = MBlockAllocator(
+                            block_size=count*size, align=size)
     cdef graph_arc* request(self) except NULL:
         cdef graph_arc *a = self.arcs
         if a == NULL:
