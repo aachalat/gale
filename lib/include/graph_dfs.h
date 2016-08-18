@@ -28,4 +28,6 @@
 /* various dfs graph algorithms  */
 typedef int (*f_report_vertex)(void *, struct graph_vertex*);
 
-size_t graph_components(struct graph_vertex*, f_report_vertex, void*);
+size_t graph_components(vertex_list*, f_report_vertex, void*);
+int graph_connected(vertex_list*);
+

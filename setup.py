@@ -62,6 +62,8 @@ import os
 import sys
 from os.path import join, split, isfile, dirname, splitext
 
+from glob import iglob
+
 from distutils.core import setup
 from distutils.extension import Extension
 from distutils.command.build_ext import build_ext as _build_ext
@@ -123,23 +125,6 @@ class build_ext(_build_ext):
             # dependant module
             for x in self.extensions:
                 if len(x.libraries): x.runtime_library_dirs=["$ORIGIN"]
-        #fix extension dependancies:
-        for x in self.extensions:
-            if len(x.libraries):
-                for y in x.libraries:
-                    for z in self.extensions:
-                        zname = z.name.split('.')[-1]
-                        if z is not x and zname.startswith("lib"+y):
-                            p = []
-                            if not self.inplace:
-                                p.extend(split(self.build_lib))
-                            p.extend(z.name.split('.')[:-1])
-                            fn = self.get_ext_filename(zname)
-                            if sys.platform == 'darwin':
-                                fn, _ = splitext(fn)
-                                fn += ".dylib"
-                            p.append(fn)
-                            x.depends.append(join(*p))
 
     if sys.platform == 'darwin':
         # intercept module building to allow for shared library ("lib" prefix)
@@ -177,32 +162,38 @@ class build_ext(_build_ext):
             return _build_ext.build_extension(self, ext)
 
 include_dirs = ["lib/include"]
-
+inc_depends = list((h for p in include_dirs for h in iglob(join(p,"*.h"))))
 ext_modules = [
     #using distutils build_ext to make a shared library in the galxe package
     Extension(
         "galxe.libgalxe_support",
         sources=["lib/graph_core.c", "lib/graph_dfs.c"],
-        include_dirs=include_dirs,)
+        include_dirs=include_dirs,
+        depends=list(inc_depends))
 ]
 
 pyx_modules = [
     Extension("galxe.graph", sources=["galxe/graph.pyx"],
                libraries=["galxe_support"],
-               include_dirs=include_dirs),
+               include_dirs=include_dirs,
+               depends=list(inc_depends)),
     Extension("galxe.utils", sources=["galxe/utils.pyx"],
-               include_dirs=include_dirs),
+               libraries=["galxe_support"],
+               include_dirs=include_dirs,),
     Extension("galxe.core", sources=["galxe/core.pyx"],
-               include_dirs=include_dirs),
+               libraries=["galxe_support"],
+               include_dirs=include_dirs,
+               depends=list(inc_depends)),
     Extension("galxe.dfs", sources=["galxe/dfs.pyx"],
                libraries=["galxe_support"],
                include_dirs=include_dirs),
     Extension("galxe.hamcycle", sources=["galxe/hamcycle.pyx"],
            libraries=["galxe_support"],
-           include_dirs=include_dirs),
+           include_dirs=include_dirs,
+           depends=list(inc_depends)),
 ]
 
-ext_modules.extend(cythonize(pyx_modules))
+ext_modules.extend(cythonize(pyx_modules)) #, gdb_debug=True
 
 if __name__ == "__main__":
 

@@ -87,7 +87,7 @@ cdef class MBlockAllocator:
         return _MBlockIter(self.head)
     def __len__(self):
         return sum(1 for _ in iter(self))
-    cdef void* request(self, size_t bytes) except NULL:
+    cdef void *request(self, size_t bytes) except NULL:
         cdef _MBlock mb = self.head
         if bytes > self.block_size:
             raise MemoryError("block_size is lower than requested bytes.")
@@ -100,6 +100,7 @@ cdef class MBlockAllocator:
         if self.head is None:
             return 0
         return <size_t>(self.head.remaining() / bytes)
+
 
 cdef class TextFileTokenizer:
     def __cinit__(self, file_):

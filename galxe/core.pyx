@@ -17,25 +17,25 @@
 #  limitations under the License.
 
 
+
 cdef class VertexManager:
 
     def __cinit__(self, size_t count, size_t size=0):
-        self.vertices = NULL
+        vlist_reset(&self.vertices)
         if size < sizeof(graph_vertex): size = sizeof(graph_vertex)
         self.v_size = size
         self.allocator = MBlockAllocator(block_size=count*size)
 
     cdef graph_vertex* request(self) except NULL:
-        cdef graph_vertex *v = self.vertices
-        if v == NULL:
+        cdef graph_vertex *v = vlist_first(&self.vertices)
+        if vlist_is_done(v, &self.vertices):
             v = <graph_vertex*>self.allocator.request(self.v_size)
         else:
-            self.vertices = v.next
+            v_detach(v)
         return v
 
     cdef void release(self, graph_vertex* v):
-        v.next = self.vertices
-        self.vertices = v.next
+        vlist_push(v, &self.vertices)
 
     def __str__(self):
         cdef str s
@@ -49,69 +49,33 @@ cdef class VertexManager:
         return s
 
     def __len__(self):
-        cdef graph_vertex *v = self.vertices
-        cdef int x = 0
-        while v!=NULL:
-            x += 1
-            v = v.next
-        return x
+        return vlist_length(&self.vertices)
 
-
-#cdef class _ArcManager:
-#    def __cinit__(self, size_t count, size_t size=0):
-#        if size < sizeof(graph_vertex): size = sizeof(graph_arc)
-#        self.a_size = size
-#        self.arcs = NULL
-#        self.allocator = MBlockAllocator(block_size=count*size)
-#    cdef graph_arc* request(self) except NULL:
-#        cdef graph_arc *a = self.arcs
-#        if a == NULL:
-#            a = <graph_arc*>self.allocator.request(self.a_size)
-#        else:
-#            self.arcs = a.next
-#        return a
-#    cdef void release(self, graph_arc *a):
-#        a.next = self.arcs
-#        self.arcs = a
-#    def __str__(self):
-#        cdef str s
-#        s =  "arc allocator:\n"
-#        s +=  "\tarcs available: %i\n" % (len(self) +
-#                            self.allocator.available(self.a_size))
-#        s += "\tblocks allocated: %i\n" % len(self.allocator)
-#        s += "\tblock size: %i bytes  (%i arcs per block)\n" % (
-#                            self.allocator.block_size,
-#                            self.allocator.block_size / self.a_size)
-#        return s
-#    def __len__(self):
-#        cdef graph_arc *a = self.arcs
-#        cdef int x = 0
-#        while (a!=NULL):
-#            x += 1
-#            a = a.next
-#        return x
 
 cdef class EdgeManager:
     def __cinit__(self, size_t count, size_t size=0):
+        alist_reset(&self.arcs)
         if size < sizeof(graph_edge): size = sizeof(graph_edge)
         #power of 2 check on size....)
-        assert (not (size & (size-1)))
+        assert not (size & (size-1)) , "edge size is not power of 2"
         self.e_size = size
-        self.arcs = NULL
         self.allocator = MBlockAllocator(
                             block_size=count*size, align=size)
+
     cdef graph_arc* request(self) except NULL:
-        cdef graph_arc *a = self.arcs
-        if a == NULL:
+        cdef graph_arc *a = alist_first(&self.arcs)
+        if alist_is_done(a,&self.arcs):
             a = <graph_arc*>self.allocator.request(self.e_size)
         else:
-            self.arcs = a.next
+            a_detach(a)
         return a
+
     cdef void release(self, graph_arc *a):
-        if a_cross(a) < a:
-            a = a_cross(a)
-        a.next = self.arcs
-        self.arcs = a
+        cdef graph_arc *t=a_cross(a)
+        if t < a:
+            a = t
+        alist_push(a, &self.arcs)
+
     def __str__(self):
         cdef str s
         s =  "edge allocator:\n"
@@ -122,24 +86,7 @@ cdef class EdgeManager:
                             self.allocator.block_size,
                             self.allocator.block_size / self.e_size)
         return s
-    def __len__(self):
-        cdef graph_arc *a = self.arcs
-        cdef int x = 0
-        while (a!=NULL):
-            x += 1
-            a = a.next
-        return x
 
-cdef void set_graph_resources(
-    graph_resources *r,
-    VertexManager vm,
-    EdgeManager em
-):
-    if em is not None:
-        r.e_manager = <void*>em
-        r.request_edge = <f_request_edge>em.request
-        r.release_edge = <f_release_edge>em.release
-    if vm is not None:
-        r.v_manager = <void*>vm
-        r.request_vertex = <f_request_vertex>vm.request
-        r.release_vertex = <f_release_vertex>vm.release
+    def __len__(self):
+        return alist_length(&self.arcs)
+

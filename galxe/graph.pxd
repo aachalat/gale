@@ -21,17 +21,21 @@ from .core cimport *
 
 cdef class Graph:
     cdef:
-        graph_vertex *vertices
+        vertex_list vertices
         str  _name
-        VertexManager v_manager
-        EdgeManager    e_manager
+
+        dict            v_container
+        VertexManager   v_manager
+        EdgeManager     e_manager
+
         graph_resources resources
 
         size_t default_vertex_block_count(self)
         size_t default_arc_block_count(self)
         size_t vertex_size(self)
         size_t edge_size(self)
-        void _ensure_managers(self, size_t vcount, size_t acount) except *
+        size_t vb_count(self)
+        size_t eb_count(self)
 
     cpdef size_t arc_count(self)
     cpdef void parse_rep(self, rep) except *
@@ -42,12 +46,9 @@ cdef class Graph:
     # dfs algorithms that work with standard graph_vertex (w0,w1 defined)
     # see dfs.pyx for implementations
 
-    cpdef list components(self)
-    cpdef list components_c(self)
-    cpdef size_t components_count(self)
+    cpdef Graph components(self)
     cpdef bint connected(Graph)
-
-
 
 cpdef list parse_file(str file_name)
 cpdef size_t write_file(str file_name, list graphs, bint relabel=*)
+

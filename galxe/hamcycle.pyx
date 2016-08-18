@@ -16,116 +16,362 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from .core cimport (
-    graph_vertex,
-    graph_arc,
-    arc_data,
-    EdgeManager,
-    graph_edge_ext,
-    a_data,
-    a_cross,
-    as_vertex,
-    find_vertex,
-    find_edge_by_vid
-)
-
 from .graph cimport Graph
+from .core cimport *
+from .utils cimport MBlockAllocator
 
-cdef struct hamcycle_vertex:
-    graph_vertex vertex
-    (graph_arc *) endpoint, removed_arcs, cycle_edge
-    graph_vertex *last_anchor
+cdef struct hc_marker:
+    hc_marker    *next
+    graph_vertex *v
+    graph_arc    *m_created
+    graph_arc    *m_detached
+    graph_arc    *g_detached
 
-cdef class HamCycleGraph(Graph):
+cdef inline void copy_marker(hc_marker *d, hc_marker *s) nogil:
+    d.v = s.v
+    d.m_detached = s.m_detached
+    d.m_created  = s.m_created
+    d.g_detached = s.g_detached
 
-    cdef graph_arc *detached
-    cdef bint _ext_ready
+cdef inline hc_marker *push_marker(hc_marker *s, hc_marker **f_markers) nogil:
+    cdef hc_marker *d = f_markers[0]
+    f_markers[0] = d.next
+    d.next = s
+    copy_marker(d, s)
+    return d
 
-    def __cinit__(self, *args, **kwargs):
-        self.detached = NULL
-        self._ext_ready = False
+cdef inline void push_v(hc_marker *h, graph_vertex *v) nogil:
+    v_detach(v)
+    v_attach(v, v_after(h.v))
+    h.v = v
 
-    cdef size_t vertex_size(self):
-        return sizeof(hamcycle_vertex)
+cdef inline void push_a(hc_marker *h, graph_arc *a) nogil:
+    a_detach(a)
+    h.g_detached = a_set_next(a, h.g_detached)
 
-    cdef size_t edge_size(self):
-        return sizeof(graph_edge_ext)
+cdef inline void push_e(hc_marker *h, graph_arc *a) nogil:
+    push_a(h, a)
+    push_a(h, a_cross(a))
 
-    cpdef size_t find_hamcycles(self):
-        # first find out if graph is connected
+cdef inline void push_m(hc_marker *h, graph_arc *a) nogil:
+    a_detach(a)
+    h.m_detached = a_set_next(a, h.m_detached)
 
-        if not self.connected():
-            return 0
+cdef inline graph_arc *second_arc(graph_vertex *v) nogil:
+    return a_next(v_arcs_first(v))
 
-        self.prep_arcs()
+cdef inline bint no_second_arc(graph_vertex *v) nogil:
+    return v_arcs_is_done(second_arc(v),v)
 
+cdef inline void move_v(vertex_list *k, graph_vertex *v) nogil:
+    v_detach(v)
+    v_attach(v, vlist_bottom(k))
 
-    cpdef prep_arcs(self):
-        cdef graph_vertex *v
-        cdef graph_arc    *a
-        cdef graph_arc    **pn
+cdef inline hc_marker *rewind(
+    vertex_list *g,
+    hc_marker *h,
+    graph_arc **f_edges,
+    hc_marker **f_markers
+) nogil:
+    cdef:
+        (graph_arc *) a, na
+        hc_marker *n = h.next
 
-        # prep arcs/edges for fast removal
-        v = self.vertices
-        while v:
-            a = v.arcs
-            pn = &v.arcs
-            while a:
-                a_data(a).w0.arc_pn = pn
-                pn = &a.next
-                a = a.next
-            v = v.next
-        self._ext_ready = True
+    h.next = f_markers[0]
+    f_markers[0] = h
 
-    cpdef detach_arc(self, size_t u, size_t v):
-        cdef (graph_arc *) a, na
-        cdef arc_data *d
-        if not self._ext_ready: return None
-        a = find_edge_by_vid(self.vertices, u, v)
-        if a:
-            na = a.next
-            d = a_data(a)
-            d.w0.arc_pn[0] = a.next
-            if na: a_data(na).w0.arc_pn = d.w0.arc_pn
-            a.next = self.detached
-            self.detached = a
-            return True
-        return False
+    # restore vertices to g
+    if n.v != h.v:
+        vlist_append_chunk_top(g, v_next(n.v), h.v)
 
-    cpdef attach_arc(self, size_t count=1):
-        cdef (graph_arc *) a, na, n
-        cdef graph_vertex *v
-        if not self._ext_ready: return None
-        a = self.detached
-        if not a: return None
-        while count and a:
-            count -= 1
-            n = a.next
+    # restore graph minor edge endpoints (to top of arc lists)
+    # must be done before removing the minor edges at this level
+    a = h.m_detached
+    while a != n.m_detached:
+        na = a_next(a)
+        a_attach(a, v_arcs_top(a_cross(a).target))
+        a = na
 
-            v = as_vertex(a_cross(a))
-            na = v.arcs
-            if na: a_data(na).w0.arc_pn = &a.next
-            a_data(a).w0.arc_pn = &v.arcs
-            a.next = na
-            v.arcs = a
+    # remove graph minor edges created during path contraction
+    a = h.m_created
+    while a != n.m_created:
+        a_detach(a)
+        a_detach(a_cross(a))
+        f_edges[0] = a_set_next(a, f_edges[0])
+        a = a.w0.arcs
 
-            a = n
-        self.detached = a
-        return True
+    # restore arcs (to the bottom of arc lists)
+    a = h.g_detached
+    while a != n.g_detached:
+        na = a_next(a)
+        a_attach(a, v_arcs_bottom(a_cross(a).target))
+        a = na
+    return n
 
-    cpdef list_detached(self):
-        cdef list d = []
-        a = self.detached
-        while a:
-            d.append((as_vertex(a_cross(a)).vid, as_vertex(a).vid))
-            a = a.next
-        return d
+cdef inline graph_arc *find_endpoint(
+    vertex_list *g,
+    vertex_list *k,
+    hc_marker   *h,
+    graph_arc   *c,
+    graph_arc   *o,
+) nogil:
+    cdef:
+        (graph_vertex *) v, w, ov = o.target
+        (graph_arc *)    a1, ac, a, z
+    while 1:
+        v  = c.target
+        a1 = v_arcs_first(v)
+        a  = a_next(a1)
+        ac = a_cross(c)
 
+        if v_arcs_is_done(a_next(a), v):
+            push_v(h, v) # degree 2
+            c = a if a1 == ac else a1
+            if c.target == ov:
+                push_v(h, ov)
+                return o
+            continue
 
+        if a1.w0.arcs == NULL: return c
+        if a1 == ac:           return c
 
+        # force join of two graph minor edges
 
+        push_v(h, v)
 
+        if a1.target == ov:
+            push_v(h, ov)
+            return o
 
+        if a != ac:
+            a_detach(ac)
+            a_attach(ac, a_after(a1))
 
+        a = a_next(ac)
+        while not v_arcs_is_done(a, v):
+            push_a(h, a_cross(a))
+            w = a.target
+            z = second_arc(w)
+            if v_arcs_is_done(z, w):          return NULL   # degree 1
+            if v_arcs_is_done(a_next(z), w):  move_v(k, w)  # degree 2
+            a = a_next(a)
+        c = a1
 
+cdef inline int path_contraction(
+    graph_arc    *c,
+    graph_arc    *o,
+    vertex_list  *g,
+    vertex_list  *k,
+    hc_marker    *h,
+    graph_arc   **f_edges
+) nogil:
+    cdef:
+       (graph_vertex *) ot, ct
+       (graph_arc *) a
+       bint z = False
 
+    while 1:
+        # contract path in two directions along arcs c and o
+        # until no more contractions possible
+
+        z = False
+        a = find_endpoint(g, k, h, c, o)
+        if a == NULL: return -1
+        if a == o:    return 1
+        if a != c:
+            c = a
+            z = True
+
+        a = find_endpoint(g, k, h, o, c)
+        if a == NULL: return -1
+        if a == c:    return 1
+        if a != o:
+            o = a
+            z = True
+
+        while z:
+            a = find_endpoint(g, k, h, c, o)
+            if a == NULL: return -1
+            if a == o:    return 1
+            if a == c:    break
+            c = o
+            o = a
+
+        # detach path endpoints from graph
+
+        if c.w0.arcs != NULL:  push_m(h, a_cross(c))
+        else:                  push_a(h, a_cross(c))
+        if o.w0.arcs != NULL:  push_m(h, a_cross(o))
+        else:                  push_a(h, a_cross(o))
+
+        ct = c.target
+        ot = o.target
+        a  = v_arcs_first(ct)
+
+        while not v_arcs_is_done(a, ct):
+            if a.target == ot:
+                # remove pre-existing edge
+                push_e(h, a)
+                if a_cross(c) != o: #edge replacment, no change in degree
+                    if no_second_arc(ot): move_v(k, ot)
+                    if no_second_arc(ct): move_v(k, ct)
+                break
+            a = a_next(a)
+
+        # place graph minor edge between c.target and o.target
+
+        a = f_edges[0]
+        f_edges[0] = a_next(a)
+        a.target = ct
+        a_cross(a).target = ot
+        a.w0.arcs = h.m_created
+        a_cross(a).w0.arcs = h.m_created
+        h.m_created = a
+
+        # ensure edge is the first arc in each list
+
+        a_attach(a, v_arcs_top(ot))
+        a_attach(a_cross(a), v_arcs_top(ct))
+
+        ct = vlist_first(k)
+        if vlist_is_done(ct, k): break     # all possible paths contracted
+        c = v_arcs_first(ct)
+        o = a_next(c)
+        push_v(h, ct)
+    return 0
+
+cdef inline bint _prep(vertex_list *g, vertex_list *k) nogil:
+    cdef:
+        (graph_vertex *) n, v = vlist_first(g)
+        graph_arc *a
+        size_t     c = 0
+    while not vlist_is_done(v, g):
+        a = v_arcs_first(v)
+        c = 0
+        while not v_arcs_is_done(a, v):
+            a.w0.arcs = NULL
+            c += 1
+            a = a_next(a)
+        n = v_next(v)
+        if c == 2: move_v(k, v)
+        elif c == 1: return True
+        v = n
+    return False
+
+cdef void _allocate(
+    MBlockAllocator m,
+    EdgeManager em,
+    size_t count,
+    hc_marker **f_markers,
+    graph_arc **f_edges
+) except *:
+    cdef:
+        hc_marker *h
+        graph_arc *a
+    for _ in xrange(count):
+        h = <hc_marker*>m.request(sizeof(hc_marker))
+        h.next = f_markers[0]
+        f_markers[0] = h
+        a  = em.request()
+        f_edges[0] = a_set_next(a, f_edges[0])
+
+cdef void _deallocate(EdgeManager em, graph_arc *f_edges):
+    cdef graph_arc *a
+    while f_edges != NULL:
+        a = a_next(f_edges)
+        em.release(f_edges)
+        f_edges = a
+
+cpdef int hc_count(Graph graph) except *:
+    cdef:
+        graph_arc        dummy_arc
+        vertex_list      d2_vertices, hamcycle
+        (vertex_list *)  g = &graph.vertices, k = &d2_vertices
+        (graph_arc *)    a, a1, a2
+        graph_arc       *f_edges = NULL
+        hc_marker        base, stop
+        (hc_marker *)    h = &base, f_markers = NULL
+        MBlockAllocator  m
+        (graph_vertex *) v
+        size_t           count = 0
+        int              x     = 0
+
+    count = vlist_length(g)
+    if count < 3 or not graph.connected(): return 0
+    m = MBlockAllocator(graph.vb_count()*sizeof(hc_marker))
+
+    _allocate(m, graph.e_manager, count - 1 , &f_markers, &f_edges)
+
+    vlist_reset(k)
+    vlist_reset(&hamcycle)
+
+    # prep first marker (so rewind can restore graph)
+    h.next = NULL
+    h.g_detached = &dummy_arc  # first choice for edge contraction
+    h.v = <graph_vertex*>&hamcycle
+    h.m_detached = NULL
+    h.m_created = v_arcs_first(vlist_first(g))
+
+    h = &stop
+    h.next = &base
+    copy_marker(h, &base)
+
+    if _prep(g, k):
+        _deallocate(graph.e_manager, f_edges)
+        return 0
+
+    count = 0
+    if not vlist_is_empty(k):
+        v = vlist_first(k)
+        push_v(h, v)
+        a = v_arcs_first(v)
+        x = path_contraction(a, a_next(a), g, k, h, &f_edges)
+        if x:
+            vlist_combine_bottom(g, k)
+            if x>0 and vlist_is_empty(g): count += 1
+            while h != &base: h = rewind(g, h, &f_edges, &f_markers)
+            _deallocate(graph.e_manager, f_edges)
+            return count
+        if not graph.connected():
+            while h != &base: h = rewind(g, h, &f_edges, &f_markers)
+            _deallocate(graph.e_manager, f_edges)
+            return count
+
+    while 1:
+        while not x:
+            a = v_arcs_first(vlist_first(g))
+            if a.w0.arcs != NULL: a = a_next(a)
+            h.g_detached.w0.arcs = a
+            h = push_marker(h, &f_markers)
+            x = path_contraction(a, a_cross(a), g, k, h, &f_edges)
+        while x:
+            vlist_combine_bottom(g, k)
+            if x>0 and vlist_is_empty(g): count += 1
+            if h == &stop: break
+            x = 0
+            h = rewind(g, h, &f_edges, &f_markers)
+            a = h.g_detached.w0.arcs
+            h.g_detached.w0.arcs = NULL
+            push_e(h, a)  # search exhausted for a at this level
+            v  = a.target
+            a1 = v_arcs_first(v)
+            a2 = a_next(a1)
+            if v_arcs_is_done(a_next(a2), v):
+                push_v(h, v)
+                v = a_cross(a).target
+                a = a_next(a_next(v_arcs_first(v)))
+                if v_arcs_is_done(a, v): move_v(k, v)
+                x = path_contraction(a1, a2, g, k, h, &f_edges)
+            else:
+                v  = a_cross(a).target
+                a1 = v_arcs_first(v)
+                a2 = a_next(a1)
+                if v_arcs_is_done(a_next(a2), v):
+                    push_v(h, v)
+                    x = path_contraction(a1, a2, g, k, h, &f_edges)
+        else: continue
+        break
+
+    while h != &base: h = rewind(g, h, &f_edges, &f_markers)
+    _deallocate(graph.e_manager, f_edges)
+    return count

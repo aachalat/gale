@@ -24,99 +24,132 @@
 #include <stddef.h>
 #include <stdint.h>
 
-struct graph_arc {
-    struct graph_arc **target;  /* target vertex arc list,
-                                   also can cast to graph_vertex* */
-    struct graph_arc *next;
-};
+#include "ds_nblist.h"
 
-struct graph_edge_lhs {
-    struct graph_arc a;
-    struct graph_arc pad;
-};
+/* *** undirected graph ***
 
-struct graph_edge_rhs {
-    struct graph_arc pad;
-    struct graph_arc a;
-};
+Vertices in an undirected graph are stored in a vertex_list.
 
-union graph_edge {
-    struct graph_edge_lhs l;
-    struct graph_edge_rhs r;
-    struct graph_arc a[2];
-};
+Edges are composed of a pair of directed arcs.
 
+Each undirected graph vertex structure starts as the top of an adjacency list
+of outward pointing arcs.
 
-/* access the other arc in an edge
+i.e. a vertex can be cast to an arc_list
+     or an arc_list can be cast back to a vertex
 
-   TODO: allow for different pointer sizes, will require some work
-   TODO: ensure that arc structure size is a power of 2
-   NOTE: graph_edge must be memory aligned to 2*sizeof(struct graph_arc) */
+Edges must be byte aligned to the size of the edge, so that the
+opposite facing arc can be quickly found with a xor operation.
 
-#define a_cross(ARC) \
-((struct graph_arc*)(((uintptr_t)(ARC)) \
-    ^ (uintptr_t)(sizeof(struct graph_arc))))
+This code will not work on systems that do not have pointers that
+can be cast as uintptr_t.
+
+Each arc has a utility variable w0 to store an arbitrary word sized
+value/object.  (mostly to provide padding)
+
+Each vertex has two utility variables w0, w1.
+
+*/
 
 struct graph_vertex;
+struct graph_arc;
+
+LIST_ENTRY_TYPE(graph_arc);
+LIST_ENTRY_TYPE(graph_vertex);
+
+typedef LIST_ENTRY_TYPE(graph_vertex) vertex_list;
+typedef LIST_ENTRY_TYPE(graph_arc) arc_list;
 
 union word_aux {
     struct graph_vertex *vertex;
     struct graph_arc    *arcs;
-    struct graph_arc    **arc_pn;  /* (i.e. &a->next on previous node) */
+    struct graph_arc   **ap;
+    vertex_list         *vlist;
+    arc_list            *alist;
     void  *other;
     size_t order;
     size_t lowpt;
-    size_t color;
+    long   color;
+};
+
+LIST_ENTRY_TYPE(graph_arc) {
+    LIST_ENTRY_MEMBERS(graph_arc);
+};
+
+struct graph_arc {
+    LIST_ENTRY_TYPE(graph_arc) p;     /* list connectivity */
+    struct graph_vertex *target;
+    union  word_aux  w0;
+};
+
+struct graph_edge {
+    struct graph_arc a[2];
+};
+
+/* access the other arc in an edge
+
+   NOTE: ensure that arc structure size is a power of 2
+   NOTE: graph_edge must be memory aligned to 2*sizeof(struct graph_arc) */
+
+inline struct graph_arc* a_cross(struct graph_arc *a)
+{
+  uintptr_t xa = (uintptr_t)a ^ (uintptr_t)sizeof(struct graph_arc);
+  return (struct graph_arc*)xa;
+}
+
+LIST_ENTRY_TYPE(graph_vertex) {
+    LIST_ENTRY_TYPE(graph_arc) arcs;
+    LIST_ENTRY_MEMBERS(graph_vertex);
 };
 
 struct graph_vertex {
-    struct graph_arc    *arcs;    /* keep at top of struct !!! */
-    struct graph_vertex *next;
+    LIST_ENTRY_TYPE(graph_vertex) p;
     size_t vid;
     union word_aux w0;
     union word_aux w1;
 };
 
-struct arc_data {
-    union word_aux w0;
-    union word_aux w1;
-};
 
-struct graph_edge_ext {
-    union graph_edge edge;
-    struct arc_data data[2];
-};
 
-/* for arc data to be accesible edges need to be aligned on
-   sizeof(graph_edge_ext) and allocated to be sizeof(struct graph_edge_ext)*/
+#define ALIST(V) (arc_list*)(V)
 
-#define a_data(ARC) \
-((struct arc_data*)(((uintptr_t)(ARC)) \
-    ^ (uintptr_t)(sizeof(union graph_edge))))
+#define IE inline
 
-#define as_vertex(ARC) \
-    ((struct graph_vertex*)((struct graph_arc*)(ARC)->target))
+LIST_ENTRY_TYPE_BOILERPLATE(IE,a,graph_arc);
+LIST_TYPE_BOILERPLATE(IE,alist,a,arc_list,graph_arc);
+LIST_TYPE_EXTRAS_BOILERPLATE(IE,alist,a,arc_list,graph_arc);
+LIST_TYPE_BOILERPLATE(IE,v_arcs,a,struct graph_vertex,graph_arc);
 
+LIST_ENTRY_TYPE_BOILERPLATE(IE,v,graph_vertex);
+LIST_TYPE_BOILERPLATE(IE,vlist,v,vertex_list,graph_vertex);
+LIST_TYPE_EXTRAS_BOILERPLATE(IE,vlist,v,vertex_list,graph_vertex);
+
+typedef struct graph_vertex *(*f_find_vertex)(void *, size_t);
 typedef struct graph_vertex *(*f_request_vertex)(void *);
 typedef struct graph_arc *(*f_request_edge)(void *);
 typedef void (*f_release_vertex)(void *, struct graph_vertex*);
 typedef void (*f_release_edge)(void *, struct graph_arc*);
+typedef void (*f_register_vertex)(void*, struct graph_vertex*);
+
 
 struct graph_resources {
-    void            *v_manager;
-    void            *e_manager;
+    void             *v_manager;
+    void             *e_manager;
+    void             *v_container;
+    vertex_list      *g;
     f_release_edge    release_edge;
     f_request_edge    request_edge;
-    f_request_vertex request_vertex;
-    f_release_vertex release_vertex;
+    f_request_vertex  request_vertex;
+    f_release_vertex  release_vertex;
+    f_find_vertex     find_vertex;
+    f_register_vertex register_vertex;
 };
 
-struct graph_vertex *find_vertex(struct graph_vertex*, size_t);
 struct graph_vertex *create_vertex(struct graph_resources*, size_t);
-struct graph_arc    *find_edge_by_vid(struct graph_vertex*, size_t, size_t);
-struct graph_arc    *find_edge(struct graph_vertex*, struct graph_vertex*);
-struct graph_arc    *create_edge(struct graph_resources*, struct graph_vertex*, struct graph_vertex*);
-struct graph_vertex *ensure_vertex(struct graph_resources *,struct graph_vertex **, size_t);
-struct graph_arc *ensure_edge(struct graph_resources *, struct graph_vertex **, size_t, size_t);
+struct graph_arc    *create_edge(struct graph_resources*,
+                                 struct graph_vertex*, struct graph_vertex*);
+struct graph_vertex *ensure_vertex(struct graph_resources*, size_t);
+struct graph_arc    *ensure_edge(struct graph_resources*, size_t, size_t);
 
-void copy_graph(struct graph_resources*, struct graph_vertex*, struct graph_vertex**);
+void copy_graph(struct graph_resources*, vertex_list*);
+void reset_graph_resources(struct graph_resources*);

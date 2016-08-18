@@ -7,7 +7,7 @@
   you may not use this file except in compliance with the License.
   You may obtain a copy of the License at
 
-  
+
       http://www.apache.org/licenses/LICENSE-2.0
 
 
@@ -21,152 +21,173 @@
 
 #include "graph.h"
 
-inline struct graph_vertex*
-find_vertex(struct graph_vertex *v, size_t vid)
+/* declare extern prototypes to force procedure code to be
+   generated for inline functions (for debugging),
+   since all inline code seems to actually be inline
+   (see gcc manual for more) */
+
+LIST_ENTRY_TYPE_PROTO(extern,a,graph_arc);
+LIST_TYPE_PROTO(extern,alist,a,arc_list,graph_arc);
+LIST_TYPE_EXTRAS_PROTO(extern,alist,a,arc_list,graph_arc);
+LIST_TYPE_PROTO(extern,v_arcs,a,struct graph_vertex,graph_arc);
+
+LIST_ENTRY_TYPE_PROTO(extern,v,graph_vertex);
+LIST_TYPE_PROTO(extern,vlist,v,vertex_list,graph_vertex);
+LIST_TYPE_EXTRAS_PROTO(extern,vlist,v,vertex_list,graph_vertex);
+
+extern struct graph_arc* a_cross(struct graph_arc *a);
+
+static struct graph_vertex*
+find_vertex(vertex_list* g, size_t vid)
 {
-    while (v && v->vid != vid) v = v->next;
-    return v;
+    struct graph_vertex* v = vlist_first(g);
+    for (;;) {
+        if (vlist_is_done(v, g)) return NULL;
+        if (v->vid == vid) return v;
+        v = v_next(v);
+    }
+    return NULL;
 }
 
-inline struct graph_arc*
-find_edge_by_vid(struct graph_vertex* z, size_t u_vid, size_t v_vid)
+static void
+register_vertex(void *container, struct graph_vertex *v)
 {
-    struct graph_vertex *v, *u;
-    if (!(v=find_vertex(z, v_vid))) return (struct graph_arc*)v;
-    if (!(u=find_vertex(z, u_vid))) return (struct graph_arc*)u;
-    return find_edge(u, v);
+    /* do nothing */
+    return;
 }
 
-inline struct graph_arc*
-find_edge(struct graph_vertex* u, struct graph_vertex* v)
+void
+reset_graph_resources(struct graph_resources *r)
 {
-    struct graph_arc* a = u->arcs;
-    while (a && as_vertex(a)!=v) a=a->next;
-    return a;
+    r->v_manager = NULL;
+    r->e_manager = NULL;
+    r->v_container = NULL;
+    r->g = NULL;
+    r->release_edge = NULL;
+    r->request_edge = NULL;
+    r->find_vertex = (f_find_vertex)&find_vertex;
+    r->register_vertex = (f_register_vertex)&register_vertex;
+    r->request_vertex = NULL;
+    r->release_vertex = NULL;
 }
 
-inline struct graph_vertex* 
+static inline struct graph_arc*
+find_edge(struct graph_vertex *u, struct graph_vertex *v)
+{
+    struct graph_arc* a = v_arcs_first(u);
+    while (!v_arcs_is_done(a,u)) {
+        if (a->target == v) return a;
+        a = a_next(a);
+    }
+    return NULL;
+}
+
+struct graph_vertex*
 create_vertex(struct graph_resources *r, size_t vid)
 {
     struct graph_vertex* v = r->request_vertex(r->v_manager);
     if (!v) return v;
     v->vid = vid;
-    v->arcs = (struct graph_arc*)'\0';
+    v_arcs_reset(v);
+    v_attach(v, vlist_bottom(r->g));
+    r->register_vertex(r->v_container, v);
     return v;
 }
 
-inline struct graph_arc* 
+struct graph_arc*
 create_edge(
-    struct graph_resources *r, 
-    struct graph_vertex* u, 
+    struct graph_resources *r,
+    struct graph_vertex* u,
     struct graph_vertex* v)
 {
-    struct graph_arc *a;
-
-    a = r->request_edge(r->e_manager);
+    struct graph_arc *a = r->request_edge(r->e_manager);
     if (!a) return a;
-
-    a->target = &(v->arcs);
-    a->next = u->arcs;
-    u->arcs = a;
+    a->target = v;
+    a_attach(a, v_arcs_top(u));
     a = a_cross(a);
-    a->target = &(u->arcs);
-    a->next = v->arcs;
-    v->arcs = a;
-
+    a->target = u;
+    a_attach(a, v_arcs_top(v));
     return a_cross(a);
 }
 
-inline struct graph_vertex *
-ensure_vertex(
-    struct graph_resources *r, 
-    struct graph_vertex **g,
-    size_t vid)
+struct graph_vertex *
+ensure_vertex(struct graph_resources *r, size_t vid)
 {
-    struct graph_vertex *v=find_vertex(*g, vid);
-    if (!v) {
+    struct graph_vertex *v;
+    if (!(v = r->find_vertex(r->v_container, vid))) {
         v = create_vertex(r, vid);
-        if (!v) return v;
-        v->next = *g;
-        *g = v;
     }
     return v;
 }
 
-inline struct graph_arc *
-ensure_edge(
-    struct graph_resources *r, 
-    struct graph_vertex **g,
-    size_t u_vid,
-    size_t v_vid)
+struct graph_arc *
+ensure_edge(struct graph_resources *r, size_t u_vid, size_t v_vid)
 {
     struct graph_vertex *u, *v;
-    struct graph_arc *au;
+    struct graph_arc *a=NULL;
+    int z=0;
 
-    u=ensure_vertex(r, g, u_vid);
-    if (!u) return (struct graph_arc*)'\0';
-    v=ensure_vertex(r, g, v_vid); 
-    if (!v) return (struct graph_arc*)'\0';
-    au = find_edge(u, v); 
-    if (!au) au = create_edge(r, u, v);
-    return au;
+    z=!(u=r->find_vertex(r->v_container, u_vid));
+    z=!(v=r->find_vertex(r->v_container, v_vid)) || z;
+
+    if ((!u && !(u=create_vertex(r, u_vid))) ||
+        (!v && !(v=create_vertex(r, v_vid)))) return NULL;
+
+    if (z || !(a=find_edge(u, v))) a=create_edge(r, u, v);
+
+    return a;
 }
 
 void
-copy_graph(
-    struct graph_resources *r,
-    struct graph_vertex *source,
-    struct graph_vertex **dest)
+copy_graph(struct graph_resources *dest, vertex_list *g)
 {
-    struct graph_vertex *tu, *v=source, *u=*dest;
+    struct graph_vertex *x, *u, *v;
     struct graph_arc    *a;
+    size_t v_vid;
 
-    /* initialise v->w0.vertex to copy */ 
-    if (u) {
-        while (v) {
-            tu = find_vertex(u, v->vid);
-            if (!tu) tu = create_vertex(r, v->vid);
-            if (!tu) return; /* TODO: cleanup already created... */
-            tu->next = u;
-            u = tu;
-            v->w0.vertex = tu;
-            v = v->next;
+    if (vlist_is_empty(dest->g)) {
+
+        v=vlist_first(g);
+        while (!vlist_is_done(v, g)) {
+            if (!(v->w0.vertex = create_vertex(dest, v->vid))) return;
+            v = v_next(v);
         }
-        v = source;
-        while (v) {
-            a = v->arcs;
-            while (a) {
-                tu = as_vertex(a);
-                if (v->vid < tu->vid 
-                    && !find_edge(v->w0.vertex, tu->w0.vertex)
-                    && !create_edge(r, v->w0.vertex, 
-                                        tu->w0.vertex)) return;
-                
-                a = a->next;
+
+        v = vlist_first(g);
+        while (!vlist_is_done(v, g)) {
+            a = v_arcs_first(v);
+            v_vid = v->vid;
+            x = v->w0.vertex;
+            while (!v_arcs_is_done(a, v)) {
+                u = a->target->w0.vertex;
+                a = a_next(a);
+                if (v_vid > u->vid) continue;
+                if (!create_edge(dest, u, x)) return;
             }
-            v = v->next;
+            v = v_next(v);
         }
-    } else  {
-        while (v) {
-            tu = create_vertex(r, v->vid);
-            if (!tu) return;
-            tu->next = u;
-            u = tu;
-            v->w0.vertex = tu;
-            v = v->next;
-        }
-        v = source;
-        while (v) {
-            a = v->arcs;
-            while (a) {
-                tu = as_vertex(a);
-                if (v->vid < tu->vid 
-                     && !create_edge(r, v->w0.vertex, 
-                                        tu->w0.vertex)) return;
-                a = a->next;
-            }
-            v = v->next;
-        }
+        return;
     }
-    *dest = u;
+
+    /* slow version, vertices and edges may already exist */
+
+    v=vlist_first(g);
+    while (!vlist_is_done(v, g)) {
+        if (!(v->w0.vertex = ensure_vertex(dest, v->vid))) return;
+        v = v_next(v);
+    }
+
+    v = vlist_first(g);
+    while (!vlist_is_done(v, g)) {
+        a = v_arcs_first(v);
+        v_vid = v->vid;
+        x = v->w0.vertex;
+        while (!v_arcs_is_done(a, v)) {
+            u = a->target->w0.vertex;
+            a = a_next(a);
+            if (v_vid > u->vid) continue;
+            if (!find_edge(u, x) && !create_edge(dest, u, x)) return;
+        }
+        v = v_next(v);
+    }
 }

@@ -22,9 +22,8 @@ from .graph cimport Graph  # cyclic import TODO: try to remove this
 
 cdef extern from "graph_dfs.h":
     ctypedef bint (*f_report_vertex)(void*, graph_vertex*)
-    size_t graph_components(graph_vertex*,f_report_vertex,void*) except *
+    size_t graph_components(vertex_list*,f_report_vertex,void*) except *
+    bint graph_connected(vertex_list*)
 
-cpdef list components(Graph)
-cpdef list components_c(Graph)
-cpdef size_t components_count(Graph g)
-cpdef bint connected(Graph)
+cpdef Graph components(Graph)
+

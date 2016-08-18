@@ -17,157 +17,24 @@
 #  limitations under the License.
 
 
-cdef bint add_vid_to_list(void *list_, graph_vertex* v) except *:
-    (<list>list_).append(v.vid)
-    return False
+from .core cimport create_vertex
 
-cdef bint add_vid_to_list_exc(void *list_, graph_vertex* v):
-    cdef list_wrapper l
-    cdef int rv = 0
+cdef bint add_to_graph(void *g, graph_vertex* v):
     try:
-        rv = add_vid_to_list(list_, v)
+        create_vertex(&(<graph_wrapper>g).resources, v.vid)
+        return False
     except:
         import sys
-        l = <list_wrapper>list_
-        l.lw_exc = sys.exc_info()
-        return True
-    return rv
+        (<graph_wrapper>g).w_exc = sys.exc_info()
+    return True
 
-cdef class list_wrapper(list):
-    cdef object lw_exc
+cdef class graph_wrapper(Graph):
+    cdef object w_exc
 
-# graph component algorithms, c version w/ callbacks and cython version
-# The c version seems to run faster (very slight) when there are few
-# components, but the cython version becomes faster with larger
-# numbers of components.
-
-cpdef list components_c(Graph g):
-    cdef list_wrapper cp = list_wrapper()
-    graph_components(
-        g.vertices,
-        <f_report_vertex>add_vid_to_list_exc,
-        <void*>cp)
-    if cp.lw_exc is not None:
-        raise cp.lw_exc[0], cp.lw_exc[1], cp.lw_exc[2]
+cpdef Graph components(Graph g):
+    cdef graph_wrapper cp = graph_wrapper(vb_count=g.vb_count(),
+                                          fast_lookup=False)
+    graph_components(&g.vertices, <f_report_vertex>add_to_graph, <void*>cp)
+    if cp.w_exc is not None:
+        raise cp.w_exc[0], cp.lw_exc[1], cp.lw_exc[2]
     return cp
-
-cpdef list components(Graph g):
-    cdef graph_vertex *v = g.vertices
-    cdef graph_arc    *a
-    cdef size_t order = 0
-    cdef list components = []
-
-    if v==NULL:
-        return components
-
-    # initialize order etc...
-
-    while (v!=NULL):
-        v.w0.order = 0
-        v = v.next
-
-    v = g.vertices
-    while v!=NULL:
-
-        if v.arcs==NULL:
-            components.append(v.vid)
-            v = v.next
-            continue
-
-        if v.w0.order != 0:
-            v = v.next
-            continue
-
-        # start dfs on v
-        a = v.arcs
-        order += 1
-        v.w0.order = order
-        components.append(v.vid)
-        v.w1.arcs = NULL
-
-        while 1:
-            if a!=NULL:
-                if as_vertex(a).w0.order != 0:
-                    # skip already visited vertices
-                    a = a.next
-                    continue
-                # descend into v
-                v = as_vertex(a)
-                order += 1
-                v.w0.order = order
-                v.w1.arcs = a_cross(a)
-                a = v.arcs
-                continue
-            else:
-                # backup to previous vertex
-                a = v.w1.arcs
-                if a == NULL:
-                    break
-                v = as_vertex(a)
-                a = a_cross(a).next
-                continue
-
-        v = v.next
-
-    return components
-
-cpdef size_t components_count(Graph g):
-    return graph_components(g.vertices, <f_report_vertex>NULL, NULL)
-
-cpdef bint connected(Graph g):
-
-    # modified form of list components to determine if graph is
-    # connected within a single component
-    cdef graph_vertex *v = g.vertices
-    cdef graph_arc    *a
-    cdef size_t count = 0
-
-    if v==NULL:
-        return True
-
-    # initialize order etc...
-
-    while v != NULL:
-        v.w0.order = 0
-        count += 1
-        v = v.next
-
-    if count == 1:
-        return True
-
-    v = g.vertices
-
-    if v.arcs==NULL:
-        return False
-
-    # start dfs on v
-    a = v.arcs
-    v.w0.order = 1
-    count -= 1
-    v.w1.arcs = NULL
-
-    while 1:
-        if a!=NULL:
-            if as_vertex(a).w0.order != 0:
-                # skip already visited vertices
-                a = a.next
-                continue
-            # descend into v
-            v = as_vertex(a)
-            v.w0.order = 1
-            count -= 1
-            if count == 0:
-                return True
-            v.w1.arcs = a_cross(a)
-            a = v.arcs
-            continue
-        else:
-            # backup to previous vertex
-            a = v.w1.arcs
-            if a == NULL:
-                break
-            v = as_vertex(a)
-            a = a_cross(a).next
-            continue
-
-    return count == 0

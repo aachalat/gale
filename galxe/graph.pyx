@@ -18,23 +18,37 @@
 
 
 from .utils cimport TextFileTokenizer
-from .dfs cimport components, components_c, components_count, connected
+from .dfs cimport components, graph_connected
+
+from libc.stdint cimport uintptr_t
+
+cdef graph_vertex *find_vertex(void *v_container, size_t vid):
+    cdef object r = (<dict>v_container).get(vid)
+    if r is None:
+        return NULL
+    return <graph_vertex*>(<uintptr_t>r)
+
+cdef void register_vertex(void *v_container, graph_vertex* v):
+    (<dict>v_container)[v.vid] = <uintptr_t>(<void*>v)
+
 
 cdef class VertexIterator:
-    cdef (graph_vertex *) v, n
+    cdef vertex_list *g
+    cdef graph_vertex *n
 
     def __cinit__(self, Graph g):
-        self.v = g.vertices
+        self.g = &g.vertices
+        self.n = vlist_first(self.g)
 
     def __iter__(self):
         return self
 
     def __next__(self):
         cdef graph_vertex *n
-        n = self.v
-        if n == NULL:
+        n = self.n
+        if vlist_is_done(n, self.g):
             raise StopIteration()
-        self.v = n.next
+        self.n = v_next(n)
         return n.vid
 
 
@@ -52,39 +66,75 @@ cdef class Graph:
     cdef size_t edge_size(self):
         return sizeof(graph_edge)
 
+    cdef size_t vb_count(self):
+        return (self.v_manager.allocator.block_size
+                / self.v_manager.v_size)
+
+    cdef size_t eb_count(self):
+        return (self.e_manager.allocator.block_size
+                / self.e_manager.e_size)
+
+
     def __cinit__(self, *args, **kwargs):
         self._name = ""
         self.v_manager = None
         self.e_manager = None
-        self.vertices  = NULL
-        self.resources.e_manager = NULL
-        self.resources.v_manager = NULL
+        self.v_container = None
+        reset_graph_resources(&self.resources)
+        vlist_reset(&self.vertices)
+        self.resources.g = &self.vertices
 
-    def __init__(self, rep=None, str name="", size_t vb_count=0, size_t eb_count=0):
+    def __init__(self,
+        object source=None,
+        str    name="",
+        size_t vb_count=0, size_t eb_count=0,
+        fast_lookup=True
+    ):
+        cdef VertexManager vm
+        cdef EdgeManager em
+        cdef graph_resources *r = &self.resources
+
         self._name = name
+        if isinstance(source, Graph):
+            graph = <Graph>source
+            if vb_count == 0:
+                vb_count = (<Graph>source).vb_count()
+            if eb_count == 0:
+                eb_count = (<Graph>source).eb_count()
         if vb_count == 0:
             vb_count = self.default_vertex_block_count()
         if eb_count == 0:
             eb_count = self.default_arc_block_count()
-        if rep is not None:
-            if isinstance(rep, Graph):
-                # TODO: change counts to match rep ???
-                self._ensure_managers(vb_count, eb_count)
-                copy_graph(&self.resources, (<Graph>rep).vertices, &self.vertices)
-            else:
-                self._ensure_managers(vb_count, eb_count)
-                self.parse_rep(rep)
+        if fast_lookup:
+            #use a python dict for now, once digraphs are
+            #created, try to use a self balancing tree to lookup
+            #vertices
+            self.v_container = dict()
+
+        # configure resource managers
+        self.v_manager = vm = VertexManager(vb_count, size=self.vertex_size())
+        self.e_manager = em = EdgeManager(eb_count, size=self.edge_size())
+
+        r.v_manager = <void*>vm
+        r.e_manager = <void*>em
+        r.request_vertex = <f_request_vertex> vm.request
+        r.release_vertex = <f_release_vertex> vm.release
+        r.request_edge = <f_request_edge> em.request
+        r.release_edge = <f_release_edge> em.release
+
+        if self.v_container is not None:
+            r.v_container = <void*>self.v_container
+            r.register_vertex = <f_register_vertex> register_vertex
+            r.find_vertex     = <f_find_vertex> find_vertex
         else:
-            self._ensure_managers(vb_count, eb_count)
+            r.v_container = r.g
 
-    cdef void _ensure_managers(self, size_t vb_count, size_t eb_count) except *:
-        cdef graph_resources *r = &self.resources
-        if self.v_manager is None:
-            self.v_manager = VertexManager(vb_count, size=self.vertex_size())
-        if self.e_manager is None:
-            self.e_manager = EdgeManager(eb_count, size=self.edge_size())
-        set_graph_resources(&self.resources, self.v_manager, self.e_manager)
+        # copy any source data over
 
+        if isinstance(source, Graph):
+            copy_graph(&self.resources, &(<Graph>source).vertices)
+        elif isinstance(source, list):
+            self.parse_rep(source)
 
     property name:
         def __get__(self):
@@ -113,16 +163,14 @@ cdef class Graph:
         return s
 
     cpdef size_t arc_count(self):
-        cdef graph_arc *a
-        cdef graph_vertex *v = self.vertices
-        cdef int x = 0
-        while v!=NULL:
-            a = v.arcs
-            while a!=NULL:
-                x+=1
-                a = a.next
-            v = v.next
-        return x
+        cdef:
+            vertex_list *g = &self.vertices
+            graph_vertex *v = vlist_first(g)
+            size_t count=0
+        while not vlist_is_done(v,g):
+            count += v_arcs_length(v)
+            v = v_next(v)
+        return count
 
     def edge_count(self):
         return self.arc_count() / 2
@@ -130,11 +178,11 @@ cdef class Graph:
     cpdef Graph ensure_edge(self, size_t u_vid, size_t v_vid):
         if u_vid == v_vid:
             return self
-        ensure_edge(&self.resources, &self.vertices, u_vid, v_vid)
+        ensure_edge(&self.resources, u_vid, v_vid)
         return self
 
     cpdef Graph ensure_vertex(self, size_t vid):
-        ensure_vertex(&self.resources, &self.vertices, vid)
+        ensure_vertex(&self.resources, vid)
         return self
 
     def v_info(self):
@@ -142,7 +190,8 @@ cdef class Graph:
         return s
 
     def e_info(self):
-        cdef str s = "edges in use: %i\n%s" % (self.edge_count(), self.e_manager)
+        cdef str s = "edges in use: %i\n%s" % (self.edge_count(),
+                                               self.e_manager)
         return s
 
     def info(self):
@@ -160,7 +209,7 @@ cdef class Graph:
             rg = type(g)(g)
             if <void*>x==<void*>y:
                 return rg
-            copy_graph(&rg.resources, (<Graph>y).vertices, &rg.vertices)
+            copy_graph(&rg.resources, &(<Graph>y).vertices)
             return rg
         elif isinstance(y, int):
             rg = type(g)(g)
@@ -179,20 +228,23 @@ cdef class Graph:
         elif isinstance(x, tuple) and len(x) == 2:
             self.ensure_edge(*x)
             return self
+        elif isinstance(x, list) and len(x) > 1:
+            i = iter(x)
+            u = i.next()
+            try:
+                while 1:
+                    self.ensure_edge(u, i.next())
+            except StopIteration: pass
+            return self
         elif isinstance(x, Graph):
             if <void*>x == <void*> self:
                 return self
-            copy_graph(&self.resources, (<Graph>x).vertices, &self.vertices)
+            copy_graph(&self.resources, &(<Graph>x).vertices)
             return self
         return NotImplemented
 
     def __len__(self):
-        cdef graph_vertex *v = self.vertices
-        cdef int x = 0
-        while (v!=NULL):
-            x += 1
-            v = v.next
-        return x
+        return vlist_length(&self.vertices)
 
     def __iter__(self):
         return VertexIterator(self)
@@ -213,24 +265,25 @@ cdef class Graph:
                 self.ensure_vertex(v)
 
     cpdef list make_rep(self, bint sort=False):
-        cdef graph_vertex *v = self.vertices
+        cdef vertex_list *g = &self.vertices
+        cdef graph_vertex *v = vlist_first(g)
         cdef graph_arc *a
         cdef list rep=[], vrep, arep
-        while v!=NULL:
-            a = v.arcs
+        while not vlist_is_done(v,g):
+            a = v_arcs_first(v)
             arep = []
             vrep = [v.vid, arep]
-            if a == NULL:
+            if v_arcs_is_done(a, v):
                 rep.append(vrep)
             else:
-                while a!=NULL:
-                    if v.vid < as_vertex(a).vid:
-                        arep.append(as_vertex(a).vid)
-                    a = a.next
+                while not v_arcs_is_done(a, v):
+                    if v.vid < a.target.vid:
+                        arep.append(a.target.vid)
+                    a = a_next(a)
                 if len(arep):
                     if sort: arep.sort()
                     rep.append(vrep)
-            v = v.next
+            v = v_next(v)
         if sort: rep.sort()
         return rep
 
@@ -239,15 +292,16 @@ cdef class Graph:
         #return the adjacent vertices to v
         cdef graph_vertex *v
         cdef graph_arc *a
-        cdef list adj = []
+        cdef list adj
         if isinstance(vid, int):
-            v = find_vertex(self.vertices, vid)
+            adj = []
+            v = self.resources.find_vertex(self.resources.v_container, vid)
             if v == NULL:
                 return None
-            a = v.arcs
-            while a!=NULL:
-                adj.append(as_vertex(a).vid)
-                a = a.next
+            a = v_arcs_first(v)
+            while not v_arcs_is_done(a, v):
+                adj.append(a.target.vid)
+                a = a_next(a)
             return adj
         return None
 
@@ -265,11 +319,10 @@ cdef class Graph:
             g += (u,v)
         return g
 
-    # see dfs.pyx for implmentation
-    cpdef list components(self): return components(self)
-    cpdef list components_c(self): return components_c(self)
-    cpdef bint connected(self): return connected(self)
-    cpdef size_t components_count(self): return components_count(self)
+    ## see dfs.pyx for implmentation
+
+    cpdef bint connected(self): return graph_connected(&self.vertices)
+    cpdef Graph components(self): return components(self)
 
 cpdef list parse_file(str file_name):
     #try to parse a gng text file of simple undirected graphs
@@ -312,30 +365,49 @@ cpdef size_t write_file(str file_name, list graphs, bint relabel=True):
     cdef str edges
     cdef graph_vertex *v
     cdef size_t c, gc=0
-    cdef Graph g
+    cdef Graph graph
+    cdef vertex_list *g
+    cdef graph_arc *a
 
     from os.path import isfile
 
     if isfile(file_name):
-        raise Exception("Will not overwrite existing file.")  #TODO: different exception
+        raise Exception("Will not overwrite existing file.")
+        #TODO: different exception
     with open(file_name, "w") as f:
-        for g in graphs:
-            if len(g) != max(g):
+        for graph in graphs:
+            if len(graph) != max(graph):
                 if relabel:
                     #make copy of g and relabel vertices 1..|V(G)|
-                    g = type(g)(g, name=g.name+"_relabeled") # maybe change block counts...
-                    v = g.vertices
+                    graph = type(graph)(graph,
+                                        name=graph.name+"_relabeled",
+                                        fast_lookup=False)
+                    g = &graph.vertices
+                    v = vlist_first(g)
                     c = 0
-                    while (v):
-                        c +=1
+                    while not vlist_is_done(v, g):
+                        c += 1
                         v.vid = c
-                        v = v.next
+                        v = v_next(v)
                 else:
                     raise Exception("GnG graph must have vertices 1..|V(G)|")
-            f.write("$\n&graph\n%s\n%i\n" % (g.name, len(g)))
+            f.write("$\n&Graph\n%s\n%i\n" % (graph.name, len(graph)))
             gc += 1
-            for vid in g:
-                edges = " ".join([str(y) for y in g[vid] if y > vid])
-                if edges: f.write("-%i %s\n" % (vid, edges))
+            g = &graph.vertices
+            v = vlist_first(g)
+            while not vlist_is_done(v, g):
+                a = v_arcs_first(v)
+                edges = ""
+                while not v_arcs_is_done(a, v):
+                    vid = a.target.vid
+                    if vid > v.vid:
+                        edges += " " + str(vid)
+                    a = a_next(a)
+                if edges: f.write("-%i%s\n" % (v.vid, edges))
+                v = v_next(v)
+
             f.write('0\n')
     return gc
+
+
+

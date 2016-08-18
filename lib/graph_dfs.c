@@ -22,68 +22,111 @@
 #include "graph_dfs.h"
 
 size_t
-graph_components(
-    struct graph_vertex* vertices,
-    f_report_vertex found_component_rep,
-    void *container)
+graph_components(vertex_list *g, f_report_vertex found, void *container)
 {
     struct graph_arc *a;
-    struct graph_vertex *v=vertices;
+    struct graph_vertex *v = vlist_first(g);
     size_t order=0, count=0;
 
-    if (!v) return count;
+    if (vlist_is_done(v, g)) return count;
 
-    while (v) {
+    v = vlist_first(g);
+    while (!vlist_is_done(v, g)) {
         v->w0.order = 0;
-        v = v->next;
+        v = v_next(v);
     }
 
-    v = vertices;
-
-    while (v) {
-        if (!v->arcs) {
+    v = vlist_first(g);
+    while (!vlist_is_done(v, g)) {
+        a = v_arcs_first(v);
+        if (v_arcs_is_done(a, v)) {
             count++;
-            if (found_component_rep && found_component_rep(container, v)) return count;
-            v = v->next;
+            if (found && found(container, v)) return count;
+            v = v_next(v);
             continue;
         }
 
         if (v->w0.order) {
-            v = v->next;
+            v = v_next(v);
             continue;
         }
 
-        a = v->arcs;
         v->w0.order = ++order;
         count++;
-        if (found_component_rep && found_component_rep(container, v)) return count;
-        v->w1.arcs  = (struct graph_arc*)'\0';
+        if (found && found(container, v)) return count;
+        v->w1.arcs  = NULL;
 
         while (1){
-            if (a) {
-                if (as_vertex(a)->w0.order) {
-                    a = a->next;
+            if (!v_arcs_is_done(a, v)) {
+                if (a->target->w0.order) {
+                    a = a_next(a);
                     continue;
                 }
-                v = as_vertex(a);
+                v = a->target;
                 v->w0.order = ++order;
                 v->w1.arcs = a_cross(a);
-                a = v->arcs;
+                a = v_arcs_first(v);
                 continue;
 
             } else {
-                a = v->w1.arcs;
-                if (!a) break;
-                v = as_vertex(a);
-                a = a_cross(a)->next;
+                if (!(a = v->w1.arcs)) break;
+                v = a->target;
+                a = a_next(a_cross(a));
                 continue;
-
             }
-
         }
-        v = v->next;
+        v = v_next(v);
     }
 
     return count;
 
+}
+
+int
+graph_connected(vertex_list *g)
+{
+    struct graph_arc *a;
+    struct graph_vertex *v = vlist_first(g);
+
+    size_t count = 0;
+
+    if (vlist_is_done(v, g)) return (1==1);
+
+    do {
+        v->w0.order = 0;
+        count++;
+        v = v_next(v);
+    } while (!vlist_is_done(v, g));
+
+    if (count == 1) return (1==1);
+
+    v = vlist_first(g);
+    a = v_arcs_first(v);
+    if (v_arcs_is_done(a, v)) return (0==1);
+
+    v->w0.order = 1;
+    count--;
+
+    v->w1.arcs = NULL;
+    while (1){
+        if (!v_arcs_is_done(a, v)) {
+            if (a->target->w0.order) {
+                a = a_next(a);
+                continue;
+            }
+            v = a->target;
+            v->w0.order = 1;
+            count--;
+            v->w1.arcs = a_cross(a);
+            a = v_arcs_first(v);
+            continue;
+
+        } else {
+            if (!(a = v->w1.arcs)) break;
+            v = a->target;
+            a = a_next(a_cross(a));
+            continue;
+        }
+    }
+    return (count == 0);
 }

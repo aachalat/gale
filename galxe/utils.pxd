@@ -39,7 +39,5 @@ cdef class MBlockAllocator:
         void    *request(self, size_t bytes) except NULL
         size_t   available(self, size_t bytes=*)
 
-
-
 cdef class TextFileTokenizer:
     cdef object lines, tokens
