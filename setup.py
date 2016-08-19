@@ -114,17 +114,38 @@ class build_ext(_build_ext):
     def finalize_options(self):
         _build_ext.finalize_options(self)
         if self.inplace:
-          for x in self.distribution.packages:
-            self.library_dirs.append(x)
+            for x in self.distribution.packages:
+                self.library_dirs.append(x)
         else:
-          self.library_dirs.append(self.build_lib)
-          for x in self.distribution.packages:
-              self.library_dirs.append(join(self.build_lib,x))
+            self.library_dirs.append(self.build_lib)
+            for x in self.distribution.packages:
+                self.library_dirs.append(join(self.build_lib,x))
         if sys.platform.lower().startswith("linux"):
             # allow shared library to be found in same folder as
-            # dependant module
+            # dependent module
             for x in self.extensions:
                 if len(x.libraries): x.runtime_library_dirs=["$ORIGIN"]
+
+        # find out the name of built libraries so that
+        # dependent modules know what name to use
+        # since debug versions and python3 output names are modified
+        # depending on the python version, architecture etc...
+
+        lib_fix = []
+        for x in self.extensions:
+            w = x.name.split('.')[-1]
+            if w.startswith('lib'):
+                n = w[3:]
+                z = self.get_ext_filename(x.name)
+                z = (splitext(split(z)[-1])[0])[3:]
+                if z != n: lib_fix.append((x,n,z))
+        if lib_fix:
+            for l in lib_fix:
+                for x in self.extensions:
+                    if l[0] != x and x.libraries:
+                        x.libraries[:] = [v if v!=l[1] else l[2]
+                                            for v in x.libraries]
+
 
     if sys.platform == 'darwin':
         # intercept module building to allow for shared library ("lib" prefix)
