@@ -16,11 +16,18 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+# distutils: language=c
+# distutils: libraries=galxe_support
+# distutils: include_dirs=lib/include
 
 from .utils cimport TextFileTokenizer
 from .dfs cimport components, graph_connected
 
 from libc.stdint cimport uintptr_t
+
+from ast import literal_eval #safer version of eval
+from pprint import pformat
+
 
 cdef graph_vertex *find_vertex(void *v_container, size_t vid):
     cdef object r = (<dict>v_container).get(vid)
@@ -33,10 +40,12 @@ cdef void register_vertex(void *v_container, graph_vertex* v):
 
 
 cdef class VertexIterator:
+    cdef Graph graph      #make sure iterator dies first
     cdef vertex_list *g
     cdef graph_vertex *n
 
     def __cinit__(self, Graph g):
+        self.graph = g
         self.g = &g.vertices
         self.n = vlist_first(self.g)
 
@@ -134,7 +143,7 @@ cdef class Graph:
         if isinstance(source, Graph):
             copy_graph(&self.resources, &(<Graph>source).vertices)
         elif isinstance(source, list):
-            self.parse_rep(source)
+            self.parse_repr(source)
 
     property name:
         def __get__(self):
@@ -147,20 +156,22 @@ cdef class Graph:
             self._name = value
 
     def __repr__(self):
-        from pprint import saferepr
+        if self._name:
+            return "%s(name=%r,source=%s)" % (self.__class__.__name__,
+                                   self._name,
+                                   self.make_repr(sort=True))
         return "%s(%s)" % (self.__class__.__name__,
-                           saferepr(self.make_rep(sort=True)))
+                           self.make_repr(sort=True))
+
 
     def __str__(self):
-        cdef str jrep, s = "{ \"%s\":[" % self.name
-        cdef list irep, rep = self.make_rep(sort=True)
-        from pprint import pformat
-        for irep in rep:
-            for jrep in pformat(irep).split('\n'):
-                s += "\n    %s" % jrep
-            s+=","
-        s += "\n  ]\n}\n"
-        return s
+        if self._name:
+            return "%s(name=%r,source=%s)" % (self.__class__.__name__,
+                                       self._name,
+                                       pformat(self.make_repr(sort=True)))
+        return "%s(%s)" % (self.__class__.__name__,
+                                   pformat(self.make_repr(sort=True)))
+
 
     cpdef size_t arc_count(self):
         cdef:
@@ -219,7 +230,23 @@ cdef class Graph:
             rg = type(g)(g)
             rg.ensure_edge(*y)
             return rg
+        elif isinstance(y, list) and y:
+            rg = type(g)(g)
+            if not isinstance(y[0], list):
+                rg += y
+                return rg
+            rg.parse_repr(y)
+            return rg
         return NotImplemented
+
+    cdef graph_vertex *add_list(self, list v_repr) except NULL:
+        cdef object i = iter(v_repr)
+        cdef graph_resources *r = &self.resources
+        cdef graph_vertex    *u = ensure_vertex(r, i.next())
+        try:
+            while 1: ensure_edge_v(r, u, i.next())
+        except StopIteration: pass
+        return u
 
     def __iadd__(self, x):
         if isinstance(x, int):
@@ -228,13 +255,11 @@ cdef class Graph:
         elif isinstance(x, tuple) and len(x) == 2:
             self.ensure_edge(*x)
             return self
-        elif isinstance(x, list) and len(x) > 1:
-            i = iter(x)
-            u = i.next()
-            try:
-                while 1:
-                    self.ensure_edge(u, i.next())
-            except StopIteration: pass
+        elif isinstance(x, list) and x:
+            if not isinstance(x[0], list):
+                self.add_list(x)
+                return self
+            self.parse_repr(x)
             return self
         elif isinstance(x, Graph):
             if <void*>x == <void*> self:
@@ -249,43 +274,37 @@ cdef class Graph:
     def __iter__(self):
         return VertexIterator(self)
 
-    cpdef void parse_rep(self, rep) except *:
-        cdef list x, crep
-        cdef size_t v=0, u=0
-        if isinstance(rep, basestring):
-            from ast import literal_eval #safer version of eval
-            crep = literal_eval(rep)
-        else:
-            crep = rep
-        for x in crep:
-            v = x[0]
-            for u in <list>x[1]:
-                self.ensure_edge(u, v)
-            else:
-                self.ensure_vertex(v)
+    cpdef void parse_repr(self, repr_) except *:
+        cdef list x, v_repr
+        if isinstance(repr_, basestring):
+            v_repr = literal_eval(repr_)
+        elif isinstance(repr_, list):
+            v_repr = repr_
+        else: raise TypeError(repr_)
+        for x in v_repr: self.add_list(x)
 
-    cpdef list make_rep(self, bint sort=False):
+    cpdef list make_repr(self, bint sort=False):
         cdef vertex_list *g = &self.vertices
         cdef graph_vertex *v = vlist_first(g)
         cdef graph_arc *a
-        cdef list rep=[], vrep, arep
-        while not vlist_is_done(v,g):
+        cdef list repr_=[], arep
+        while not vlist_is_done(v, g):
             a = v_arcs_first(v)
-            arep = []
-            vrep = [v.vid, arep]
-            if v_arcs_is_done(a, v):
-                rep.append(vrep)
+            if v_arcs_is_done(a,v):
+                repr_.append([v.vid])
             else:
+                arep = []
                 while not v_arcs_is_done(a, v):
-                    if v.vid < a.target.vid:
+                    if a.target.vid > v.vid:
                         arep.append(a.target.vid)
                     a = a_next(a)
-                if len(arep):
+                if arep:
                     if sort: arep.sort()
-                    rep.append(vrep)
+                    arep.insert(0, v.vid)
+                    repr_.append(arep)
             v = v_next(v)
-        if sort: rep.sort()
-        return rep
+        if sort: repr_.sort()
+        return repr_
 
 
     def __getitem__(self, vid):

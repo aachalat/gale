@@ -138,6 +138,22 @@ ensure_edge(struct graph_resources *r, size_t u_vid, size_t v_vid)
     return a;
 }
 
+struct graph_arc *
+ensure_edge_v(struct graph_resources *r, struct graph_vertex* u, size_t v_vid)
+{
+    struct graph_vertex *v;
+    struct graph_arc *a=NULL;
+    int z=0;
+
+    z=!(v=r->find_vertex(r->v_container, v_vid));
+
+    if (!v && !(v=create_vertex(r, v_vid))) return NULL;
+
+    if (z || !(a=find_edge(u, v))) a=create_edge(r, u, v);
+
+    return a;
+}
+
 void
 copy_graph(struct graph_resources *dest, vertex_list *g)
 {

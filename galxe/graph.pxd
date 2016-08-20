@@ -36,10 +36,10 @@ cdef class Graph:
         size_t edge_size(self)
         size_t vb_count(self)
         size_t eb_count(self)
-
+    cdef graph_vertex *add_list(self, list v_repr) except NULL
     cpdef size_t arc_count(self)
-    cpdef void parse_rep(self, rep) except *
-    cpdef list make_rep(self, bint sort=*)
+    cpdef void parse_repr(self, repr) except *
+    cpdef list make_repr(self, bint sort=*)
     cpdef Graph ensure_edge(self, size_t u, size_t v)
     cpdef Graph ensure_vertex(self, size_t v)
 

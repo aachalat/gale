@@ -150,6 +150,8 @@ struct graph_arc    *create_edge(struct graph_resources*,
                                  struct graph_vertex*, struct graph_vertex*);
 struct graph_vertex *ensure_vertex(struct graph_resources*, size_t);
 struct graph_arc    *ensure_edge(struct graph_resources*, size_t, size_t);
+struct graph_arc    *ensure_edge_v(struct graph_resources *,
+                                   struct graph_vertex*, size_t);
 
 void copy_graph(struct graph_resources*, vertex_list*);
 void reset_graph_resources(struct graph_resources*);

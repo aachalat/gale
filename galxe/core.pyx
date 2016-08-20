@@ -16,7 +16,10 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-
+# distutils: language=c
+# distutils: libraries=galxe_support
+# distutils: depends=graph.h, ds_nblist.h
+# distutils: include_dirs=lib/include
 
 cdef class VertexManager:
 

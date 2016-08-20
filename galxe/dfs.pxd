@@ -16,7 +16,6 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-
 from .core cimport *
 from .graph cimport Graph  # cyclic import TODO: try to remove this
 

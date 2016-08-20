@@ -71,6 +71,8 @@ cdef extern from "graph.h":
     graph_vertex *create_vertex(graph_resources*, size_t) except NULL
     graph_vertex *ensure_vertex(graph_resources*, size_t) except NULL
     graph_arc    *ensure_edge(graph_resources*, size_t, size_t) except NULL
+    graph_arc    *ensure_edge_v(graph_resources*,
+                                graph_vertex*, size_t) except NULL
 
     void copy_graph(graph_resources*, vertex_list*) except *
     void reset_graph_resources(graph_resources*) nogil

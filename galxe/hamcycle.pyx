@@ -16,6 +16,13 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+# distutils: language=c
+# distutils: libraries=galxe_support
+# distutils: depends=graph.h, ds_nblist.h
+# distutils: include_dirs=lib/include
+
+cimport cython
+
 from .graph cimport Graph
 from .core cimport *
 from .utils cimport MBlockAllocator
@@ -208,11 +215,25 @@ cdef inline int path_contraction(
         ot = o.target
         a  = v_arcs_first(ct)
 
+        # pull new endpoints to top of graph so
+        # forcing of vertices onto hc occurs sooner
+
+        # seems to have more of an effect on runtime than pre sorting
+        # the vertices before starting search
+
+        v_detach(ct)
+        v_detach(ot)
+        v_attach(ot, vlist_top(g))
+        v_attach(ct, vlist_top(g))
+
+        # find and remove pre-existing edge between ot / ct
+
         while not v_arcs_is_done(a, ct):
             if a.target == ot:
                 # remove pre-existing edge
                 push_e(h, a)
-                if a_cross(c) != o: #edge replacment, no change in degree
+                if a_cross(c) != o:
+                    #change in degree only when not replacing an edge
                     if no_second_arc(ot): move_v(k, ot)
                     if no_second_arc(ct): move_v(k, ct)
                 break
@@ -233,6 +254,7 @@ cdef inline int path_contraction(
         a_attach(a, v_arcs_top(ot))
         a_attach(a_cross(a), v_arcs_top(ct))
 
+
         ct = vlist_first(k)
         if vlist_is_done(ct, k): break     # all possible paths contracted
         c = v_arcs_first(ct)
@@ -242,9 +264,32 @@ cdef inline int path_contraction(
 
 cdef inline bint _prep(vertex_list *g, vertex_list *k) nogil:
     cdef:
-        (graph_vertex *) n, v = vlist_first(g)
+        (graph_vertex *) n, max_v ,v = vlist_first(g)
         graph_arc *a
-        size_t     c = 0
+        size_t     c = 0, max_c = 0
+
+    # TODO: enable sorting with an option
+    #       otherwise pre-ordered vertex list will not be an option
+    ## really slow sort by degree
+    #while not vlist_is_empty(g):
+    #    v = vlist_first(g)
+    #    max_c = 0
+    #    max_v = v
+    #    while not vlist_is_done(v, g):
+    #        c = 0
+    #        a = v_arcs_first(v)
+    #        while not v_arcs_is_done(a,v):
+    #            c += 1
+    #            a = a_next(a)
+    #        if c > max_c:
+    #            max_c = c
+    #            max_v = v
+    #        v = v_next(v)
+    #    v_detach(max_v)
+    #    v_attach(max_v, vlist_bottom(k))
+    #vlist_combine_bottom(g, k)
+
+    v = vlist_first(g)
     while not vlist_is_done(v, g):
         a = v_arcs_first(v)
         c = 0
@@ -282,7 +327,8 @@ cdef void _deallocate(EdgeManager em, graph_arc *f_edges):
         em.release(f_edges)
         f_edges = a
 
-cpdef int hc_count(Graph graph) except *:
+@cython.embedsignature(True)
+cpdef size_t hc_count(Graph graph) except *:
     cdef:
         graph_arc        dummy_arc
         vertex_list      d2_vertices, hamcycle
@@ -320,6 +366,8 @@ cpdef int hc_count(Graph graph) except *:
         _deallocate(graph.e_manager, f_edges)
         return 0
 
+    import sys
+    print ""
     count = 0
     if not vlist_is_empty(k):
         v = vlist_first(k)

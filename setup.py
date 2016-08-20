@@ -16,7 +16,6 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-
 def meta_info():
     name="galxe"
 
@@ -62,7 +61,7 @@ import os
 import sys
 from os.path import join, split, isfile, dirname, splitext
 
-from glob import iglob
+from glob import glob, iglob
 
 from distutils.core import setup
 from distutils.extension import Extension
@@ -80,16 +79,57 @@ with open(join(dirname(__file__), "galxe", "VERSION")) as f:
 #make sure setup works as expected:  TODO: maybe remove this
 if __name__=="__main__" and dirname(__file__): os.chdir(dirname(__file__))
 
+# python3 compatibility
+try:
+    basestring
+except NameError:
+    basestring = str
+
 def _mock_cythonize(args):
-        #todo: convert strings into Extensions w/ correct project/file name
-        #todo: fail if a c file is missing
+
+        #todo: also try to handle cpp files
+        #todo: existing Extension instances should have
+        #      contents updated from cython metadata in source file
+        from ast import literal_eval #safer version of eval
+
+        ext_modules = []
         log.warn("...mock cythonizing Extension instances...")
         strip_pyx=lambda x:x[:-3]+"c" if x.lower().endswith(".pyx") else x
+        if isinstance(args, basestring): args = [args]
         for i in args:
             if isinstance(i, Extension):
                 i.sources[:]=[strip_pyx(x) for x in i.sources]
                 log.warn("\tusing: %s  for: %s", i.sources,i.name)
-        return args
+                ext_modules.append(i)
+            elif isinstance(i, basestring):
+                for x in iglob(i):
+                    data = ""
+                    source = strip_pyx(x)
+                    try:
+                        with open(source,"r") as f:
+                            s = " "
+                            while s and not s.strip().endswith(
+                                "BEGIN: Cython Metadata"): s = f.readline()
+                            if not s: raise Exception("missing metadata")
+                            s = f.readline()
+                            while s and not s.startswith(
+                                "END: Cython Metadata"):
+                                data += s
+                                s = f.readline()
+                            if not s: raise Exception("too much metadata...")
+                    except Exception as e:
+                        log.error("failed: %s with exception: %s",  source, e)
+                        continue
+                    data = literal_eval(data)
+                    if "sources" not in data["distutils"]:
+                        data["distutils"]["sources"] = [source]
+                    else:
+                        data["distutils"]["sources"].insert(0, source)
+                    ext_modules.append(Extension(data["module_name"],
+                                                 **data["distutils"]))
+                    log.warn("\tusing cython metadata in: %s  for: %s", source,
+                            ext_modules[-1].name)
+        return ext_modules
 
 if _is_full_source_tree:
     # using the full source tree (not in a source distribution)
@@ -103,6 +143,10 @@ if _is_full_source_tree:
 else:
     def cythonize(args):
         log.warn("using a source distribution. cython files are not included.")
+        strip_pyx=lambda x:x[:-3]+"c" if x.lower().endswith(".pyx") else x
+        if isinstance(args, basestring): args = [args]
+        args[:] = [i if not isinstance(i, basestring) else strip_pyx(i)
+                    for i in args]
         return _mock_cythonize(args)
 
 if sys.platform == 'darwin':
@@ -182,39 +226,16 @@ class build_ext(_build_ext):
                     return _build_ext.build_extension(self, ext)
             return _build_ext.build_extension(self, ext)
 
-include_dirs = ["lib/include"]
-inc_depends = list((h for p in include_dirs for h in iglob(join(p,"*.h"))))
 ext_modules = [
     #using distutils build_ext to make a shared library in the galxe package
     Extension(
         "galxe.libgalxe_support",
         sources=["lib/graph_core.c", "lib/graph_dfs.c"],
-        include_dirs=include_dirs,
-        depends=list(inc_depends))
+        include_dirs=["lib/include"],
+        depends=glob("lib/include/*.h"))
 ]
 
-pyx_modules = [
-    Extension("galxe.graph", sources=["galxe/graph.pyx"],
-               libraries=["galxe_support"],
-               include_dirs=include_dirs,
-               depends=list(inc_depends)),
-    Extension("galxe.utils", sources=["galxe/utils.pyx"],
-               libraries=["galxe_support"],
-               include_dirs=include_dirs,),
-    Extension("galxe.core", sources=["galxe/core.pyx"],
-               libraries=["galxe_support"],
-               include_dirs=include_dirs,
-               depends=list(inc_depends)),
-    Extension("galxe.dfs", sources=["galxe/dfs.pyx"],
-               libraries=["galxe_support"],
-               include_dirs=include_dirs),
-    Extension("galxe.hamcycle", sources=["galxe/hamcycle.pyx"],
-           libraries=["galxe_support"],
-           include_dirs=include_dirs,
-           depends=list(inc_depends)),
-]
-
-ext_modules.extend(cythonize(pyx_modules)) #, gdb_debug=True
+ext_modules.extend(cythonize("galxe/*.pyx")) #, gdb_debug=True
 
 if __name__ == "__main__":
 
