@@ -329,6 +329,7 @@ cdef void _deallocate(EdgeManager em, graph_arc *f_edges):
 
 @cython.embedsignature(True)
 cpdef size_t hc_count(Graph graph) except *:
+    if graph is None: return 0  # guard against segfaults...
     cdef:
         graph_arc        dummy_arc
         vertex_list      d2_vertices, hamcycle

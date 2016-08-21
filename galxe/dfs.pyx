@@ -41,6 +41,7 @@ cdef class graph_wrapper(Graph):
     cdef object w_exc
 
 cpdef Graph components(Graph g):
+    if g is None: return None  # guard against segfaults...
     cdef graph_wrapper cp = graph_wrapper(vb_count=g.vb_count(),
                                           fast_lookup=False)
     graph_components(&g.vertices, <f_report_vertex>add_to_graph, <void*>cp)
