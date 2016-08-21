@@ -1,2 +1,2 @@
 graft lib/include
-include NOTICE LICENSE Makefile
+include README.md NOTICE LICENSE Makefile
