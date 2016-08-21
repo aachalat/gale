@@ -39,7 +39,7 @@ access to vertex data. The performance penalty of O(logN) for random vertex
 lookup did not seem to be a very big deal.
 
 The approach since then has been to eliminate degree lists entirely in the
-hamcycle algorithm (since we only really care about vertices's of degree one
+hamcycle algorithm (since we only really care about vertices of degree one
 or two).
 
 The performance hit of checking an adjacency list up to the third entry
