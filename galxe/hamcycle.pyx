@@ -367,8 +367,6 @@ cpdef size_t hc_count(Graph graph) except *:
         _deallocate(graph.e_manager, f_edges)
         return 0
 
-    import sys
-    print ""
     count = 0
     if not vlist_is_empty(k):
         v = vlist_first(k)
