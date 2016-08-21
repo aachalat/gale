@@ -19,7 +19,6 @@
 
 # set the version information
 #TODO: maybe use a hook to set the __version__ from git repo???
-#TODO: this will break on a zip library etc...
 from os.path import join, dirname
 with open(join(dirname(__file__), "VERSION")) as _f:
     __version__ = _f.read().strip()

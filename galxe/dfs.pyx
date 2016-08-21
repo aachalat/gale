@@ -32,6 +32,11 @@ cdef bint add_to_graph(void *g, graph_vertex* v):
         (<graph_wrapper>g).w_exc = sys.exc_info()
     return True
 
+# use a graph to hold representive vertices for each component
+# seems to be more appropriate than a list of numbers...
+
+# any exceptions that occur in add_to_graph are held in w_exc to
+# be re-raised once graph_components returns
 cdef class graph_wrapper(Graph):
     cdef object w_exc
 
@@ -41,4 +46,4 @@ cpdef Graph components(Graph g):
     graph_components(&g.vertices, <f_report_vertex>add_to_graph, <void*>cp)
     if cp.w_exc is not None:
         raise cp.w_exc[0], cp.lw_exc[1], cp.lw_exc[2]
-    return cp
+    return type(g)(cp) #return graph with same type as was entered...
