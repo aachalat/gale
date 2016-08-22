@@ -32,12 +32,6 @@ cdef class _MBlock:
         if (align and not (align & (align-1))):
             z = align - 1
             ptr=<void*>(((<uintptr_t>ptr) + z) & ~z)
-            #if ptr != self._ptr:
-            #    print "moved ptr:"
-            #    print '\tnew:\t\t',<uintptr_t>ptr
-            #    print '\tassigned:\t',<uintptr_t>self._ptr
-            #    print '\tdistance:\t',<uintptr_t>ptr - <uintptr_t>self._ptr
-            #    print '\talignment:\t',align
         self.start = ptr
         self.end = <void*>((<char*>self.start)+size)
         self.ptr = self.end
@@ -109,13 +103,10 @@ cdef class TextFileTokenizer:
     def __iter__(self):
         return self
     def __next__(self):
-        try:
-            while 1:
-                if self.tokens is None:
-                    self.tokens = iter(self.lines.next().strip().split())
-                try:
-                    return self.tokens.next()
-                except StopIteration:
-                    self.tokens = None
-        except StopIteration:
-            raise
+        while 1:
+            if self.tokens is None:
+                self.tokens = iter(self.lines.next().strip().split())
+            try:
+                return self.tokens.next()
+            except StopIteration:
+                self.tokens = None
