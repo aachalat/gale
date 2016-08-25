@@ -241,6 +241,7 @@ if __name__ == "__main__":
 
   setup(
       packages=["galxe"],
+      scripts=glob("scripts/*"),
       package_data={"galxe":["VERSION"]},
       ext_modules=ext_modules,
       cmdclass = {'build_ext':build_ext},
